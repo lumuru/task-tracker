@@ -51,6 +51,24 @@ db.exec(`
     executed_at TEXT DEFAULT (datetime('now'))
   );
 
+  CREATE TABLE IF NOT EXISTS projects (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    description TEXT,
+    status TEXT DEFAULT 'active',
+    created_by INTEGER REFERENCES team_members(id),
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT (datetime('now'))
+  );
+
+  CREATE TABLE IF NOT EXISTS project_members (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    member_id INTEGER NOT NULL REFERENCES team_members(id),
+    assigned_at TEXT DEFAULT (datetime('now')),
+    UNIQUE(project_id, member_id)
+  );
+
   CREATE TABLE IF NOT EXISTS bugs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     title TEXT NOT NULL,

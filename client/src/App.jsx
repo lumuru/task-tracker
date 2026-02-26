@@ -9,6 +9,9 @@ import TestRunExecution from './pages/TestRunExecution';
 import Bugs from './pages/Bugs';
 import BugDetail from './pages/BugDetail';
 import BugForm from './pages/BugForm';
+import Projects from './pages/Projects';
+import ProjectDetail from './pages/ProjectDetail';
+import ProjectForm from './pages/ProjectForm';
 import Settings from './pages/Settings';
 
 export default function App() {
@@ -16,6 +19,10 @@ export default function App() {
     <Routes>
       <Route element={<Layout />}>
         <Route path="/" element={<Dashboard />} />
+        <Route path="/projects" element={<Projects />} />
+        <Route path="/projects/new" element={<ProjectForm />} />
+        <Route path="/projects/:id" element={<ProjectDetail />} />
+        <Route path="/projects/:id/edit" element={<ProjectForm />} />
         <Route path="/test-cases" element={<TestCases />} />
         <Route path="/test-cases/new" element={<TestCaseForm />} />
         <Route path="/test-cases/:id" element={<TestCaseDetail />} />

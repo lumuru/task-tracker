@@ -66,6 +66,7 @@ router.delete('/:id', (req, res) => {
     db.prepare('SELECT COUNT(*) as count FROM test_runs WHERE created_by = ?').get(id),
     db.prepare('SELECT COUNT(*) as count FROM test_results WHERE executed_by = ?').get(id),
     db.prepare('SELECT COUNT(*) as count FROM bugs WHERE assigned_to = ? OR reported_by = ?').get(id, id),
+    db.prepare('SELECT COUNT(*) as count FROM project_members WHERE member_id = ?').get(id),
   ];
 
   const totalRefs = refs.reduce((sum, r) => sum + r.count, 0);

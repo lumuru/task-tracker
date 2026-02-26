@@ -4,6 +4,7 @@ const membersRouter = require('./routes/members');
 const testCasesRouter = require('./routes/testCases');
 const testRunsRouter = require('./routes/testRuns');
 const bugsRouter = require('./routes/bugs');
+const projectsRouter = require('./routes/projects');
 const dashboardRouter = require('./routes/dashboard');
 
 const app = express();
@@ -17,6 +18,7 @@ app.use('/api/members', membersRouter);
 app.use('/api/test-cases', testCasesRouter);
 app.use('/api/test-runs', testRunsRouter);
 app.use('/api/bugs', bugsRouter);
+app.use('/api/projects', projectsRouter);
 app.use('/api/dashboard', dashboardRouter);
 
 app.listen(PORT, () => {
