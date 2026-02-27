@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { getTestCase, deleteTestCase } from '../api/testCases';
-import { getBugs } from '../api/bugs';
+import { getProjectTestScript, deleteProjectTestScript } from '../api/projectTestScripts';
 
 const priorityColors = {
   critical: 'bg-red-100 text-red-800',
@@ -30,44 +29,45 @@ const bugStatusLabels = {
   fixed: 'Fixed', verified: 'Verified', closed: 'Closed',
 };
 
-export default function TestCaseDetail() {
-  const { id } = useParams();
+export default function ProjectTestScriptDetail() {
+  const { projectId, id } = useParams();
   const navigate = useNavigate();
-  const [tc, setTc] = useState(null);
+  const [ts, setTs] = useState(null);
   const [linkedBugs, setLinkedBugs] = useState([]);
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    getTestCase(id)
-      .then(setTc)
+    getProjectTestScript(projectId, id)
+      .then(setTs)
       .catch((err) => setError(err.message));
 
-    // Fetch bugs linked to this test case
     fetch(`${import.meta.env.VITE_API_URL || ''}/api/bugs?test_case_id=${id}`)
       .then(r => r.json())
       .then(setLinkedBugs)
       .catch(() => {});
-  }, [id]);
+  }, [projectId, id]);
 
   const handleDelete = async () => {
-    if (!window.confirm('Are you sure you want to delete this test case?')) return;
+    if (!window.confirm('Are you sure you want to delete this test script?')) return;
     try {
-      await deleteTestCase(id);
-      navigate('/test-cases');
+      await deleteProjectTestScript(projectId, id);
+      navigate(`/projects/${projectId}/test-scripts`);
     } catch (err) {
       setError(err.message);
     }
   };
 
-  if (error) return <div className="p-3 bg-red-50 text-red-700 rounded-md text-sm">{error}</div>;
-  if (!tc) return <p className="text-gray-500">Loading...</p>;
+  if (error && !ts) return <div className="p-3 bg-red-50 text-red-700 rounded-md text-sm">{error}</div>;
+  if (!ts) return <p className="text-gray-500">Loading...</p>;
 
   return (
     <div className="max-w-2xl">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <Link to="/test-cases" className="text-sm text-blue-600 hover:text-blue-800 mb-1 inline-block">&larr; Back to Test Cases</Link>
-          <h2 className="text-2xl font-bold text-gray-800">{tc.title}</h2>
+          <Link to={`/projects/${projectId}/test-scripts`} className="text-sm text-blue-600 hover:text-blue-800 mb-1 inline-block">
+            &larr; Back to Test Scripts
+          </Link>
+          <h2 className="text-2xl font-bold text-gray-800">{ts.title}</h2>
         </div>
         <div className="flex gap-2">
           <Link
@@ -77,7 +77,7 @@ export default function TestCaseDetail() {
             File Bug
           </Link>
           <Link
-            to={`/test-cases/${id}/edit`}
+            to={`/projects/${projectId}/test-scripts/${id}/edit`}
             className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700"
           >
             Edit
@@ -91,39 +91,41 @@ export default function TestCaseDetail() {
         </div>
       </div>
 
+      {error && <div className="mb-4 p-3 bg-red-50 text-red-700 rounded-md text-sm">{error}</div>}
+
       <div className="bg-white border border-gray-200 rounded-lg p-6 space-y-5">
         <div className="flex gap-3">
-          <span className={`inline-block px-2 py-0.5 text-xs font-medium rounded ${priorityColors[tc.priority] || ''}`}>
-            {tc.priority}
+          <span className={`inline-block px-2 py-0.5 text-xs font-medium rounded ${priorityColors[ts.priority] || ''}`}>
+            {ts.priority}
           </span>
-          <span className={`inline-block px-2 py-0.5 text-xs font-medium rounded ${statusColors[tc.status] || ''}`}>
-            {tc.status}
+          <span className={`inline-block px-2 py-0.5 text-xs font-medium rounded ${statusColors[ts.status] || ''}`}>
+            {ts.status}
           </span>
-          {tc.module && (
+          {ts.module && (
             <span className="inline-block px-2 py-0.5 text-xs font-medium rounded bg-purple-100 text-purple-800">
-              {tc.module}
+              {ts.module}
             </span>
           )}
         </div>
 
-        {tc.description && (
+        {ts.description && (
           <div>
             <h3 className="text-sm font-medium text-gray-500 mb-1">Description</h3>
-            <p className="text-sm text-gray-800 whitespace-pre-wrap">{tc.description}</p>
+            <p className="text-sm text-gray-800 whitespace-pre-wrap">{ts.description}</p>
           </div>
         )}
 
-        {tc.steps && (
+        {ts.steps && (
           <div>
             <h3 className="text-sm font-medium text-gray-500 mb-1">Steps</h3>
-            <p className="text-sm text-gray-800 whitespace-pre-wrap">{tc.steps}</p>
+            <p className="text-sm text-gray-800 whitespace-pre-wrap">{ts.steps}</p>
           </div>
         )}
 
-        {tc.expected_result && (
+        {ts.expected_result && (
           <div>
             <h3 className="text-sm font-medium text-gray-500 mb-1">Expected Result</h3>
-            <p className="text-sm text-gray-800 whitespace-pre-wrap">{tc.expected_result}</p>
+            <p className="text-sm text-gray-800 whitespace-pre-wrap">{ts.expected_result}</p>
           </div>
         )}
 
@@ -152,9 +154,9 @@ export default function TestCaseDetail() {
         )}
 
         <div className="border-t border-gray-200 pt-4 text-xs text-gray-400 space-y-1">
-          {tc.created_by_name && <p>Created by: {tc.created_by_name}</p>}
-          <p>Created: {tc.created_at}</p>
-          <p>Updated: {tc.updated_at}</p>
+          {ts.created_by_name && <p>Created by: {ts.created_by_name}</p>}
+          <p>Created: {ts.created_at}</p>
+          <p>Updated: {ts.updated_at}</p>
         </div>
       </div>
     </div>

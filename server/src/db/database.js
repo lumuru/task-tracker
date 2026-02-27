@@ -86,4 +86,20 @@ db.exec(`
   );
 `);
 
+// Migration: add project_id column to test_cases if it doesn't exist
+const columns = db.prepare("PRAGMA table_info(test_cases)").all();
+const hasProjectId = columns.some(c => c.name === 'project_id');
+if (!hasProjectId) {
+  db.exec("ALTER TABLE test_cases ADD COLUMN project_id INTEGER REFERENCES projects(id)");
+  // Backfill: match existing test cases to projects by module = project name
+  db.exec(`
+    UPDATE test_cases SET project_id = (
+      SELECT id FROM projects WHERE projects.name = test_cases.module
+    ) WHERE project_id IS NULL
+  `);
+}
+
+// Create index after migration ensures column exists
+db.exec("CREATE INDEX IF NOT EXISTS idx_test_cases_project_id ON test_cases(project_id)");
+
 module.exports = db;

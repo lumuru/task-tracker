@@ -1,4 +1,4 @@
-const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+const BASE_URL = import.meta.env.VITE_API_URL || '';
 
 export async function getTestCases(filters = {}) {
   const params = new URLSearchParams();

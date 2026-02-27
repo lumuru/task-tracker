@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { getTestCases, getModules, deleteTestCase, uploadTestCases } from '../api/testCases';
+import { getTestCases, getModules } from '../api/testCases';
 
 const PRIORITIES = ['critical', 'high', 'medium', 'low'];
 const STATUSES = ['draft', 'ready', 'deprecated'];
@@ -25,8 +25,6 @@ export default function TestCases() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [search, setSearch] = useState(searchParams.get('search') || '');
-  const [uploadResult, setUploadResult] = useState(null);
-  const [uploading, setUploading] = useState(false);
 
   const filters = {
     module: searchParams.get('module') || '',
@@ -73,76 +71,17 @@ export default function TestCases() {
     updateFilter('search', search);
   };
 
-  const handleUpload = async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    e.target.value = '';
-
-    setUploading(true);
-    setUploadResult(null);
-    try {
-      const result = await uploadTestCases(file);
-      setUploadResult(result);
-      fetchData();
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setUploading(false);
-    }
-  };
-
-  const handleDelete = async (id) => {
-    if (!window.confirm('Are you sure you want to delete this test case?')) return;
-    try {
-      await deleteTestCase(id);
-      fetchData();
-    } catch (err) {
-      setError(err.message);
-    }
-  };
-
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
-        <h2 className="text-2xl font-bold text-gray-800">Test Cases</h2>
-        <div className="flex gap-2">
-          <label className={`px-4 py-2 text-sm font-medium rounded-md cursor-pointer ${uploading ? 'bg-gray-300 text-gray-500' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>
-            {uploading ? 'Uploading...' : 'Upload Excel'}
-            <input
-              type="file"
-              accept=".xlsx,.xls"
-              onChange={handleUpload}
-              disabled={uploading}
-              className="hidden"
-            />
-          </label>
-          <Link
-            to="/test-cases/new"
-            className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700"
-          >
-            New Test Case
-          </Link>
+        <div>
+          <h2 className="text-2xl font-bold text-gray-800">Test Cases</h2>
+          <p className="text-sm text-gray-500 mt-1">Read-only view across all projects. Manage test scripts from within a project.</p>
         </div>
       </div>
 
       {error && (
         <div className="mb-4 p-3 bg-red-50 text-red-700 rounded-md text-sm">{error}</div>
-      )}
-
-      {uploadResult && (
-        <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-md text-sm">
-          <p className="font-medium text-green-800">
-            Imported {uploadResult.imported} of {uploadResult.total_rows} test cases.
-          </p>
-          {uploadResult.errors.length > 0 && (
-            <ul className="mt-1 text-green-700">
-              {uploadResult.errors.map((e, i) => (
-                <li key={i}>Row {e.row}: {e.error}</li>
-              ))}
-            </ul>
-          )}
-          <button onClick={() => setUploadResult(null)} className="mt-1 text-xs text-green-600 underline">Dismiss</button>
-        </div>
       )}
 
       {/* Filters */}
@@ -199,22 +138,35 @@ export default function TestCases() {
             <thead className="bg-gray-50">
               <tr>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Title</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Project</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Module</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Priority</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Created By</th>
-                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
               {testCases.map((tc) => (
                 <tr key={tc.id} className="hover:bg-gray-50">
                   <td className="px-4 py-3">
-                    <Link to={`/test-cases/${tc.id}`} className="text-sm text-blue-600 hover:text-blue-800 font-medium">
-                      {tc.title}
-                    </Link>
+                    {tc.project_id ? (
+                      <Link to={`/projects/${tc.project_id}/test-scripts/${tc.id}`} className="text-sm text-blue-600 hover:text-blue-800 font-medium">
+                        {tc.title}
+                      </Link>
+                    ) : (
+                      <span className="text-sm text-gray-800 font-medium">{tc.title}</span>
+                    )}
                   </td>
-                  <td className="px-4 py-3 text-sm text-gray-500">{tc.module || '—'}</td>
+                  <td className="px-4 py-3">
+                    {tc.project_id ? (
+                      <Link to={`/projects/${tc.project_id}`} className="text-sm text-blue-600 hover:text-blue-800">
+                        {tc.project_name}
+                      </Link>
+                    ) : (
+                      <span className="text-sm text-gray-400">Unassigned</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3 text-sm text-gray-500">{tc.module || '\u2014'}</td>
                   <td className="px-4 py-3">
                     <span className={`inline-block px-2 py-0.5 text-xs font-medium rounded ${priorityColors[tc.priority] || ''}`}>
                       {tc.priority}
@@ -225,15 +177,7 @@ export default function TestCases() {
                       {tc.status}
                     </span>
                   </td>
-                  <td className="px-4 py-3 text-sm text-gray-500">{tc.created_by_name || '—'}</td>
-                  <td className="px-4 py-3 text-right space-x-2">
-                    <Link to={`/test-cases/${tc.id}/edit`} className="text-sm text-blue-600 hover:text-blue-800">
-                      Edit
-                    </Link>
-                    <button onClick={() => handleDelete(tc.id)} className="text-sm text-red-600 hover:text-red-800">
-                      Delete
-                    </button>
-                  </td>
+                  <td className="px-4 py-3 text-sm text-gray-500">{tc.created_by_name || '\u2014'}</td>
                 </tr>
               ))}
             </tbody>

@@ -10,7 +10,10 @@ const router = express.Router();
 router.get('/', (req, res) => {
   const { module, priority, status, search } = req.query;
 
-  let sql = 'SELECT tc.*, tm.name as created_by_name FROM test_cases tc LEFT JOIN team_members tm ON tc.created_by = tm.id';
+  let sql = `SELECT tc.*, tm.name as created_by_name, p.name as project_name
+    FROM test_cases tc
+    LEFT JOIN team_members tm ON tc.created_by = tm.id
+    LEFT JOIN projects p ON tc.project_id = p.id`;
   const conditions = [];
   const params = [];
 
@@ -121,9 +124,13 @@ router.post('/upload', upload.single('file'), (req, res) => {
 
 // GET /api/test-cases/:id
 router.get('/:id', (req, res) => {
-  const testCase = db.prepare(
-    'SELECT tc.*, tm.name as created_by_name FROM test_cases tc LEFT JOIN team_members tm ON tc.created_by = tm.id WHERE tc.id = ?'
-  ).get(req.params.id);
+  const testCase = db.prepare(`
+    SELECT tc.*, tm.name as created_by_name, p.name as project_name
+    FROM test_cases tc
+    LEFT JOIN team_members tm ON tc.created_by = tm.id
+    LEFT JOIN projects p ON tc.project_id = p.id
+    WHERE tc.id = ?
+  `).get(req.params.id);
 
   if (!testCase) {
     return res.status(404).json({ error: 'Test case not found' });

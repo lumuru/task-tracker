@@ -8,7 +8,7 @@ router.get('/', (req, res) => {
   const projects = db.prepare(`
     SELECT p.*,
       (SELECT COUNT(*) FROM project_members WHERE project_id = p.id) AS member_count,
-      (SELECT COUNT(*) FROM test_cases WHERE module = p.name) AS test_script_count,
+      (SELECT COUNT(*) FROM test_cases WHERE project_id = p.id) AS test_script_count,
       (SELECT name FROM team_members WHERE id = p.created_by) AS created_by_name
     FROM projects p
     ORDER BY p.created_at DESC
@@ -22,7 +22,7 @@ router.get('/:id', (req, res) => {
 
   const project = db.prepare(`
     SELECT p.*,
-      (SELECT COUNT(*) FROM test_cases WHERE module = p.name) AS test_script_count,
+      (SELECT COUNT(*) FROM test_cases WHERE project_id = p.id) AS test_script_count,
       (SELECT name FROM team_members WHERE id = p.created_by) AS created_by_name
     FROM projects p WHERE p.id = ?
   `).get(id);
@@ -101,8 +101,8 @@ router.delete('/:id', (req, res) => {
   }
 
   const testScripts = db.prepare(
-    'SELECT COUNT(*) as count FROM test_cases WHERE module = ?'
-  ).get(existing.name);
+    'SELECT COUNT(*) as count FROM test_cases WHERE project_id = ?'
+  ).get(id);
 
   if (testScripts.count > 0) {
     return res.status(409).json({

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { getProject, deleteProject, addProjectMembers, removeProjectMember } from '../api/projects';
 import { getMembers } from '../api/members';
+import { getProjectTestScripts } from '../api/projectTestScripts';
 
 const statusColors = {
   active: 'bg-green-100 text-green-800',
@@ -19,16 +20,19 @@ export default function ProjectDetail() {
   const [project, setProject] = useState(null);
   const [allMembers, setAllMembers] = useState([]);
   const [selectedMember, setSelectedMember] = useState('');
+  const [testScripts, setTestScripts] = useState([]);
   const [error, setError] = useState(null);
 
   const fetchData = async () => {
     try {
-      const [projectData, membersData] = await Promise.all([
+      const [projectData, membersData, scriptsData] = await Promise.all([
         getProject(id),
         getMembers(),
+        getProjectTestScripts(id),
       ]);
       setProject(projectData);
       setAllMembers(membersData);
+      setTestScripts(scriptsData);
       setError(null);
     } catch (err) {
       setError(err.message);
@@ -155,8 +159,37 @@ export default function ProjectDetail() {
 
         {/* Test Scripts */}
         <div>
-          <h3 className="text-sm font-medium text-gray-500 mb-1">Test Scripts</h3>
-          <p className="text-sm text-gray-800">{project.test_script_count} test script{project.test_script_count !== 1 ? 's' : ''}</p>
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="text-sm font-medium text-gray-500">Test Scripts ({testScripts.length})</h3>
+            <div className="flex gap-2">
+              <Link to={`/projects/${id}/test-scripts`} className="text-xs text-blue-600 hover:text-blue-800">View All</Link>
+              <Link to={`/projects/${id}/test-scripts/new`} className="text-xs text-blue-600 hover:text-blue-800">+ New</Link>
+            </div>
+          </div>
+          {testScripts.length === 0 ? (
+            <p className="text-sm text-gray-400">No test scripts yet.</p>
+          ) : (
+            <div className="space-y-1">
+              {testScripts.slice(0, 5).map((ts) => (
+                <Link key={ts.id} to={`/projects/${id}/test-scripts/${ts.id}`} className="flex items-center justify-between py-1.5 px-3 bg-gray-50 rounded-md hover:bg-gray-100">
+                  <span className="text-sm text-gray-800 truncate mr-3">{ts.title}</span>
+                  <div className="flex gap-2 flex-shrink-0">
+                    <span className={`px-2 py-0.5 text-xs font-medium rounded ${
+                      { critical: 'bg-red-100 text-red-800', high: 'bg-orange-100 text-orange-800', medium: 'bg-yellow-100 text-yellow-800', low: 'bg-green-100 text-green-800' }[ts.priority] || ''
+                    }`}>{ts.priority}</span>
+                    <span className={`px-2 py-0.5 text-xs font-medium rounded ${
+                      { draft: 'bg-gray-100 text-gray-800', ready: 'bg-blue-100 text-blue-800', deprecated: 'bg-red-50 text-red-600' }[ts.status] || ''
+                    }`}>{ts.status}</span>
+                  </div>
+                </Link>
+              ))}
+              {testScripts.length > 5 && (
+                <Link to={`/projects/${id}/test-scripts`} className="block text-center text-sm text-blue-600 hover:text-blue-800 py-1">
+                  View all {testScripts.length} test scripts
+                </Link>
+              )}
+            </div>
+          )}
         </div>
 
         <div className="border-t border-gray-200 pt-4 text-xs text-gray-400 space-y-1">
