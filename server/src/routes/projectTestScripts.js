@@ -73,6 +73,52 @@ router.get('/modules', (req, res) => {
   res.json(modules.map(m => m.module));
 });
 
+// GET /api/projects/:projectId/test-scripts/export — download as Excel
+router.get('/export', (req, res) => {
+  const { projectId } = req.params;
+
+  const project = getProject(projectId);
+  if (!project) {
+    return res.status(404).json({ error: 'Project not found' });
+  }
+
+  const testScripts = db.prepare(`
+    SELECT id, module, title, steps, expected_result
+    FROM test_cases
+    WHERE project_id = ?
+    ORDER BY module, id
+  `).all(projectId);
+
+  const rows = testScripts.map(ts => ({
+    'Test Case ID': ts.id,
+    'Test Scenario': ts.module || '',
+    'Test Case': ts.title,
+    'Test Steps': ts.steps || '',
+    'Expected Result': ts.expected_result || '',
+  }));
+
+  const worksheet = XLSX.utils.json_to_sheet(rows);
+
+  // Set column widths
+  worksheet['!cols'] = [
+    { wch: 12 },  // Test Case ID
+    { wch: 20 },  // Test Scenario
+    { wch: 35 },  // Test Case
+    { wch: 45 },  // Test Steps
+    { wch: 35 },  // Expected Result
+  ];
+
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, worksheet, 'Test Scripts');
+
+  const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+
+  const filename = `Test Scripts - ${project.name}.xlsx`;
+  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+  res.send(buffer);
+});
+
 // GET /api/projects/:projectId/test-scripts/:id — get single test script
 router.get('/:id', (req, res) => {
   const { projectId, id } = req.params;

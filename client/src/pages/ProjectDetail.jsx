@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { getProject, deleteProject, addProjectMembers, removeProjectMember } from '../api/projects';
 import { getMembers } from '../api/members';
-import { getProjectTestScripts } from '../api/projectTestScripts';
+import { getProjectTestScripts, exportProjectTestScriptsUrl } from '../api/projectTestScripts';
 
 const statusColors = {
   active: 'bg-green-100 text-green-800',
@@ -162,6 +162,7 @@ export default function ProjectDetail() {
           <div className="flex items-center justify-between mb-2">
             <h3 className="text-sm font-medium text-gray-500">Test Scripts ({testScripts.length})</h3>
             <div className="flex gap-2">
+              <a href={exportProjectTestScriptsUrl(id)} className="text-xs text-green-600 hover:text-green-800">Download</a>
               <Link to={`/projects/${id}/test-scripts`} className="text-xs text-blue-600 hover:text-blue-800">View All</Link>
               <Link to={`/projects/${id}/test-scripts/new`} className="text-xs text-blue-600 hover:text-blue-800">+ New</Link>
             </div>

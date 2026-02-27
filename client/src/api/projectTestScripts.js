@@ -68,6 +68,10 @@ export async function deleteProjectTestScript(projectId, id, memberId) {
   }
 }
 
+export function exportProjectTestScriptsUrl(projectId) {
+  return `${BASE_URL}/api/projects/${projectId}/test-scripts/export`;
+}
+
 export async function uploadProjectTestScripts(projectId, file, createdBy) {
   const formData = new FormData();
   formData.append('file', file);

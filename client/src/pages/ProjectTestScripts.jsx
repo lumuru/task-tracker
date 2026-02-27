@@ -6,6 +6,7 @@ import {
   getProjectTestScriptModules,
   deleteProjectTestScript,
   uploadProjectTestScripts,
+  exportProjectTestScriptsUrl,
 } from '../api/projectTestScripts';
 
 const PRIORITIES = ['critical', 'high', 'medium', 'low'];
@@ -171,6 +172,12 @@ export default function ProjectTestScripts() {
           Test Scripts {project ? `\u2014 ${project.name}` : ''}
         </h2>
         <div className="flex gap-2">
+          <a
+            href={exportProjectTestScriptsUrl(projectId)}
+            className="px-4 py-2 bg-green-600 text-white text-sm font-medium rounded-md hover:bg-green-700"
+          >
+            Download Excel
+          </a>
           <label className={`px-4 py-2 text-sm font-medium rounded-md cursor-pointer ${uploading ? 'bg-gray-300 text-gray-500' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>
             {uploading ? 'Uploading...' : 'Upload Excel'}
             <input
