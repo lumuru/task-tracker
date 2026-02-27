@@ -67,12 +67,22 @@ router.delete('/:id', (req, res) => {
     db.prepare('SELECT COUNT(*) as count FROM test_results WHERE executed_by = ?').get(id),
     db.prepare('SELECT COUNT(*) as count FROM bugs WHERE assigned_to = ? OR reported_by = ?').get(id, id),
     db.prepare('SELECT COUNT(*) as count FROM project_members WHERE member_id = ?').get(id),
+    db.prepare('SELECT COUNT(*) as count FROM projects WHERE created_by = ?').get(id),
   ];
 
   const totalRefs = refs.reduce((sum, r) => sum + r.count, 0);
   if (totalRefs > 0) {
+    // Build specific reason
+    const reasons = [];
+    if (refs[4].count > 0) reasons.push('assigned to a project');
+    if (refs[5].count > 0) reasons.push('created a project');
+    if (refs[0].count > 0) reasons.push('created test scripts');
+    if (refs[1].count > 0) reasons.push('created test runs');
+    if (refs[2].count > 0) reasons.push('has test execution results');
+    if (refs[3].count > 0) reasons.push('linked to bugs');
+
     return res.status(409).json({
-      error: 'Cannot delete member: they are referenced by other records',
+      error: `Cannot delete member: ${reasons.join(', ')}`,
     });
   }
 
