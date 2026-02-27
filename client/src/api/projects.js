@@ -1,7 +1,10 @@
 const BASE_URL = import.meta.env.VITE_API_URL || '';
 
-export async function getProjects() {
-  const res = await fetch(`${BASE_URL}/api/projects`);
+export async function getProjects(filters = {}) {
+  const params = new URLSearchParams();
+  if (filters.status) params.set('status', filters.status);
+  const query = params.toString();
+  const res = await fetch(`${BASE_URL}/api/projects${query ? `?${query}` : ''}`);
   if (!res.ok) throw new Error('Failed to fetch projects');
   return res.json();
 }
@@ -75,4 +78,10 @@ export async function removeProjectMember(projectId, memberId) {
     const err = await res.json();
     throw new Error(err.error || 'Failed to remove member');
   }
+}
+
+export async function getProjectActivity(projectId) {
+  const res = await fetch(`${BASE_URL}/api/projects/${projectId}/activity`);
+  if (!res.ok) throw new Error('Failed to fetch project activity');
+  return res.json();
 }

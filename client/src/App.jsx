@@ -13,6 +13,7 @@ import ProjectForm from './pages/ProjectForm';
 import ProjectTestScripts from './pages/ProjectTestScripts';
 import ProjectTestScriptDetail from './pages/ProjectTestScriptDetail';
 import ProjectTestScriptForm from './pages/ProjectTestScriptForm';
+import TestScriptGenerator from './pages/TestScriptGenerator';
 import Settings from './pages/Settings';
 
 export default function App() {
@@ -28,6 +29,7 @@ export default function App() {
         <Route path="/projects/:projectId/test-scripts/new" element={<ProjectTestScriptForm />} />
         <Route path="/projects/:projectId/test-scripts/:id" element={<ProjectTestScriptDetail />} />
         <Route path="/projects/:projectId/test-scripts/:id/edit" element={<ProjectTestScriptForm />} />
+        <Route path="/projects/:projectId/generate" element={<TestScriptGenerator />} />
         <Route path="/test-cases" element={<TestCases />} />
         <Route path="/test-runs" element={<TestRuns />} />
         <Route path="/test-runs/:id" element={<TestRunExecution />} />

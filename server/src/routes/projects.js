@@ -5,14 +5,21 @@ const router = express.Router();
 
 // GET /api/projects — list all projects with member count and test script count
 router.get('/', (req, res) => {
-  const projects = db.prepare(`
+  const { status } = req.query;
+  let sql = `
     SELECT p.*,
       (SELECT COUNT(*) FROM project_members WHERE project_id = p.id) AS member_count,
       (SELECT COUNT(*) FROM test_cases WHERE project_id = p.id) AS test_script_count,
       (SELECT name FROM team_members WHERE id = p.created_by) AS created_by_name
     FROM projects p
-    ORDER BY p.created_at DESC
-  `).all();
+  `;
+  const params = [];
+  if (status && ['active', 'archived'].includes(status)) {
+    sql += ' WHERE p.status = ?';
+    params.push(status);
+  }
+  sql += ' ORDER BY p.created_at DESC';
+  const projects = db.prepare(sql).all(...params);
   res.json(projects);
 });
 
@@ -39,7 +46,39 @@ router.get('/:id', (req, res) => {
     ORDER BY pm.assigned_at DESC
   `).all(id);
 
-  res.json({ ...project, members });
+  // Open defects for this project
+  const openDefects = db.prepare(`
+    SELECT COUNT(*) as count FROM bugs
+    WHERE test_case_id IN (SELECT tc.id FROM test_cases tc WHERE tc.project_id = ?)
+      AND status NOT IN ('verified', 'closed')
+  `).get(id).count;
+
+  // Latest pass rate
+  const latestRunResult = db.prepare(`
+    SELECT tr.id FROM test_runs tr
+    WHERE EXISTS (
+      SELECT 1 FROM test_results r
+      JOIN test_cases tc ON r.test_case_id = tc.id
+      WHERE r.test_run_id = tr.id AND tc.project_id = ?
+    )
+    ORDER BY tr.created_at DESC LIMIT 1
+  `).get(id);
+
+  let latestPassRate = null;
+  if (latestRunResult) {
+    const rc = db.prepare(`
+      SELECT COUNT(*) as total,
+        SUM(CASE WHEN r.status = 'pass' THEN 1 ELSE 0 END) as passed,
+        SUM(CASE WHEN r.status = 'pending' THEN 1 ELSE 0 END) as pending
+      FROM test_results r
+      JOIN test_cases tc ON r.test_case_id = tc.id
+      WHERE r.test_run_id = ? AND tc.project_id = ?
+    `).get(latestRunResult.id, id);
+    const executed = rc.total - (rc.pending || 0);
+    latestPassRate = executed > 0 ? Math.round((rc.passed / executed) * 100) : null;
+  }
+
+  res.json({ ...project, members, open_defects: openDefects, latest_pass_rate: latestPassRate });
 });
 
 // POST /api/projects — create project
@@ -183,6 +222,37 @@ router.delete('/:id/members/:memberId', (req, res) => {
   ).run(id, memberId);
 
   res.status(204).end();
+});
+
+// GET /api/projects/:id/activity — recent bugs and test results for this project
+router.get('/:id/activity', (req, res) => {
+  const { id } = req.params;
+
+  const recentBugs = db.prepare(`
+    SELECT b.id, b.title, b.status, b.severity, b.created_at,
+           reporter.name as reported_by_name
+    FROM bugs b
+    LEFT JOIN team_members reporter ON b.reported_by = reporter.id
+    WHERE b.test_case_id IN (SELECT tc.id FROM test_cases tc WHERE tc.project_id = ?)
+    ORDER BY b.created_at DESC
+    LIMIT 10
+  `).all(id);
+
+  const recentResults = db.prepare(`
+    SELECT r.status, r.executed_at, r.notes,
+           tc.id as test_case_id, tc.title as test_case_title,
+           tr.id as test_run_id, tr.name as test_run_name,
+           tm.name as executed_by_name
+    FROM test_results r
+    JOIN test_cases tc ON r.test_case_id = tc.id
+    JOIN test_runs tr ON r.test_run_id = tr.id
+    LEFT JOIN team_members tm ON r.executed_by = tm.id
+    WHERE tc.project_id = ? AND r.status != 'pending'
+    ORDER BY r.executed_at DESC
+    LIMIT 10
+  `).all(id);
+
+  res.json({ recent_bugs: recentBugs, recent_results: recentResults });
 });
 
 module.exports = router;

@@ -1,8 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { getProject, deleteProject, addProjectMembers, removeProjectMember } from '../api/projects';
+import { getProject, deleteProject, addProjectMembers, removeProjectMember, getProjectActivity } from '../api/projects';
 import { getMembers } from '../api/members';
-import { getProjectTestScripts, exportProjectTestScriptsUrl } from '../api/projectTestScripts';
+import { getProjectTestScripts, getProjectTestScriptModules, deleteProjectTestScript, uploadProjectTestScripts, exportProjectTestScriptsUrl } from '../api/projectTestScripts';
 
 const statusColors = {
   active: 'bg-green-100 text-green-800',
@@ -14,13 +14,429 @@ const statusLabels = {
   archived: 'Archived',
 };
 
+const priorityColors = {
+  critical: 'bg-red-100 text-red-800',
+  high: 'bg-orange-100 text-orange-800',
+  medium: 'bg-yellow-100 text-yellow-800',
+  low: 'bg-green-100 text-green-800',
+};
+
+const scriptStatusColors = {
+  draft: 'bg-gray-100 text-gray-800',
+  ready: 'bg-blue-100 text-blue-800',
+  deprecated: 'bg-red-50 text-red-600',
+};
+
+const severityColors = {
+  critical: 'bg-red-100 text-red-800',
+  major: 'bg-orange-100 text-orange-800',
+  minor: 'bg-yellow-100 text-yellow-800',
+  trivial: 'bg-gray-100 text-gray-600',
+};
+
+const resultStatusColors = {
+  pass: 'text-green-700 bg-green-50',
+  fail: 'text-red-700 bg-red-50',
+  blocked: 'text-yellow-700 bg-yellow-50',
+  skipped: 'text-gray-500 bg-gray-50',
+};
+
+function formatDate(dateStr) {
+  if (!dateStr) return '—';
+  const d = new Date(dateStr);
+  return d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+}
+
+function OverflowMenu({ onDelete, hasTestScripts }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+
+  useEffect(() => {
+    const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        onClick={() => setOpen(!open)}
+        className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-md transition-colors"
+        title="More actions"
+      >
+        <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+          <path d="M10 6a2 2 0 110-4 2 2 0 010 4zm0 6a2 2 0 110-4 2 2 0 010 4zm0 6a2 2 0 110-4 2 2 0 010 4z" />
+        </svg>
+      </button>
+      {open && (
+        <div className="absolute right-0 top-full mt-1 w-44 bg-white border border-gray-200 rounded-lg shadow-lg z-10 py-1">
+          {hasTestScripts ? (
+            <div className="px-4 py-2 text-sm text-gray-400 cursor-not-allowed">
+              Delete
+              <span className="block text-xs">Has test scripts</span>
+            </div>
+          ) : (
+            <button
+              onClick={() => { setOpen(false); onDelete(); }}
+              className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors"
+            >
+              Delete
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Overview Tab ──────────────────────────────────────────────
+function OverviewTab({ project, allMembers, onAddMember, onRemoveMember, testScriptCount }) {
+  const [selectedMember, setSelectedMember] = useState('');
+  const assignedIds = new Set(project.members.map((m) => m.id));
+  const availableMembers = allMembers.filter((m) => !assignedIds.has(m.id));
+
+  // Quick stats from the project data
+  const openDefects = project.open_defects || 0;
+  const latestPassRate = project.latest_pass_rate;
+
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      {/* Members panel */}
+      <div className="lg:col-span-2 bg-white border border-gray-200 rounded-lg p-5">
+        <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-4">
+          Members ({project.members.length})
+        </h3>
+
+        {project.members.length === 0 ? (
+          <p className="text-sm text-gray-400 mb-4">No members assigned.</p>
+        ) : (
+          <div className="flex flex-wrap gap-2 mb-4">
+            {project.members.map((member) => (
+              <span
+                key={member.id}
+                className="inline-flex items-center gap-2 px-3 py-1.5 bg-blue-50 text-blue-800 text-sm rounded-full border border-blue-200"
+              >
+                <span className="font-medium">{member.name}</span>
+                <span className="text-blue-500 text-xs">({member.role})</span>
+                <button
+                  onClick={() => onRemoveMember(member.id)}
+                  className="ml-1 text-blue-400 hover:text-red-600 hover:bg-red-50 rounded-full p-0.5 transition-colors"
+                  title={`Remove ${member.name}`}
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </span>
+            ))}
+          </div>
+        )}
+
+        {availableMembers.length > 0 && (
+          <div className="flex gap-2">
+            <select
+              value={selectedMember}
+              onChange={(e) => setSelectedMember(e.target.value)}
+              className="px-3 py-2.5 border border-gray-300 rounded-lg text-sm flex-1"
+            >
+              <option value="">— Select member to add —</option>
+              {availableMembers.map((m) => (
+                <option key={m.id} value={m.id}>{m.name} ({m.role})</option>
+              ))}
+            </select>
+            <button
+              onClick={() => { if (selectedMember) { onAddMember(selectedMember); setSelectedMember(''); } }}
+              disabled={!selectedMember}
+              className="px-5 py-2.5 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            >
+              Add
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* Quick Stats panel */}
+      <div className="bg-white border border-gray-200 rounded-lg p-5">
+        <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-4">Quick Stats</h3>
+        <div className="space-y-4">
+          <div className="flex justify-between items-center">
+            <span className="text-sm text-gray-500">Test Scripts</span>
+            <span className="text-lg font-semibold text-gray-800">{testScriptCount}</span>
+          </div>
+          <div className="flex justify-between items-center">
+            <span className="text-sm text-gray-500">Open Defects</span>
+            <span className={`text-lg font-semibold ${openDefects > 0 ? 'text-red-600' : 'text-gray-800'}`}>{openDefects}</span>
+          </div>
+          <div className="flex justify-between items-center">
+            <span className="text-sm text-gray-500">Pass Rate</span>
+            <span className={`text-lg font-semibold ${
+              latestPassRate === null ? 'text-gray-400' :
+              latestPassRate >= 80 ? 'text-green-600' :
+              latestPassRate >= 50 ? 'text-yellow-600' : 'text-red-600'
+            }`}>
+              {latestPassRate !== null ? `${latestPassRate}%` : '—'}
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Test Scripts Tab ─────────────────────────────────────────
+function TestScriptsTab({ projectId }) {
+  const [scripts, setScripts] = useState([]);
+  const [modules, setModules] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [moduleFilter, setModuleFilter] = useState('');
+  const [uploading, setUploading] = useState(false);
+  const [uploadResult, setUploadResult] = useState(null);
+
+  const fetchScripts = async () => {
+    try {
+      setLoading(true);
+      const filters = {};
+      if (moduleFilter) filters.module = moduleFilter;
+      const [s, m] = await Promise.all([
+        getProjectTestScripts(projectId, filters),
+        getProjectTestScriptModules(projectId),
+      ]);
+      setScripts(s);
+      setModules(m);
+      setError(null);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { fetchScripts(); }, [projectId, moduleFilter]);
+
+  const handleDelete = async (id) => {
+    if (!window.confirm('Delete this test script?')) return;
+    try {
+      await deleteProjectTestScript(projectId, id);
+      fetchScripts();
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  const handleUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    e.target.value = '';
+    setUploading(true);
+    setUploadResult(null);
+    try {
+      const result = await uploadProjectTestScripts(projectId, file);
+      setUploadResult(result);
+      fetchScripts();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  return (
+    <div>
+      {/* Actions bar */}
+      <div className="flex flex-wrap items-center gap-3 mb-4">
+        <select
+          value={moduleFilter}
+          onChange={(e) => setModuleFilter(e.target.value)}
+          className="px-3 py-2.5 border border-gray-300 rounded-lg text-sm"
+        >
+          <option value="">All Modules</option>
+          {modules.map(m => <option key={m} value={m}>{m}</option>)}
+        </select>
+
+        <div className="ml-auto flex gap-2">
+          <a
+            href={exportProjectTestScriptsUrl(projectId)}
+            className="px-4 py-2.5 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700 transition-colors"
+          >
+            Download Excel
+          </a>
+          <label className={`px-4 py-2.5 text-sm font-medium rounded-lg cursor-pointer transition-colors ${uploading ? 'bg-gray-300 text-gray-500' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>
+            {uploading ? 'Uploading...' : 'Upload Excel'}
+            <input type="file" accept=".xlsx,.xls" onChange={handleUpload} disabled={uploading} className="hidden" />
+          </label>
+          <Link
+            to={`/projects/${projectId}/generate`}
+            className="px-4 py-2.5 bg-purple-600 text-white text-sm font-medium rounded-lg hover:bg-purple-700 transition-colors"
+          >
+            Generate with AI
+          </Link>
+          <Link
+            to={`/projects/${projectId}/test-scripts/new`}
+            className="px-4 py-2.5 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
+          >
+            New Test Script
+          </Link>
+        </div>
+      </div>
+
+      {error && <div className="mb-4 p-3 bg-red-50 text-red-700 rounded-lg text-sm">{error}</div>}
+
+      {uploadResult && (
+        <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg text-sm">
+          <p className="font-medium text-green-800">
+            Imported {uploadResult.imported} of {uploadResult.total_rows} test scripts.
+          </p>
+          {uploadResult.errors.length > 0 && (
+            <ul className="mt-1 text-green-700">
+              {uploadResult.errors.map((e, i) => <li key={i}>Row {e.row}: {e.error}</li>)}
+            </ul>
+          )}
+          <button onClick={() => setUploadResult(null)} className="mt-1 text-xs text-green-600 underline">Dismiss</button>
+        </div>
+      )}
+
+      {/* Table */}
+      {loading ? (
+        <p className="text-gray-500">Loading...</p>
+      ) : scripts.length === 0 ? (
+        <p className="text-gray-500">No test scripts found.</p>
+      ) : (
+        <>
+          <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Title</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Module</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Priority</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-200">
+                {scripts.map((ts) => (
+                  <tr key={ts.id} className="hover:bg-gray-50">
+                    <td className="px-4 py-3">
+                      <Link to={`/projects/${projectId}/test-scripts/${ts.id}`} className="text-sm text-blue-600 hover:text-blue-800 font-medium">
+                        {ts.title}
+                      </Link>
+                    </td>
+                    <td className="px-4 py-3 text-sm text-gray-500">{ts.module || '\u2014'}</td>
+                    <td className="px-4 py-3">
+                      <span className={`inline-block px-2 py-0.5 text-xs font-medium rounded ${priorityColors[ts.priority] || ''}`}>
+                        {ts.priority}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className={`inline-block px-2 py-0.5 text-xs font-medium rounded ${scriptStatusColors[ts.status] || ''}`}>
+                        {ts.status}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-right space-x-3">
+                      <Link to={`/projects/${projectId}/test-scripts/${ts.id}/edit`} className="text-sm text-blue-600 hover:text-blue-800">Edit</Link>
+                      <button onClick={() => handleDelete(ts.id)} className="text-sm text-red-600 hover:text-red-800">Delete</button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p className="mt-3 text-sm text-gray-500">
+            {scripts.length} test script{scripts.length !== 1 ? 's' : ''}
+          </p>
+        </>
+      )}
+    </div>
+  );
+}
+
+// ── Activity Tab ─────────────────────────────────────────────
+function ActivityTab({ projectId }) {
+  const [activity, setActivity] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    getProjectActivity(projectId)
+      .then(setActivity)
+      .catch(() => setActivity({ recent_bugs: [], recent_results: [] }))
+      .finally(() => setLoading(false));
+  }, [projectId]);
+
+  if (loading) return <p className="text-gray-500">Loading...</p>;
+  if (!activity) return null;
+
+  const { recent_bugs, recent_results } = activity;
+  const hasNone = recent_bugs.length === 0 && recent_results.length === 0;
+
+  if (hasNone) return <p className="text-gray-500">No recent activity for this project.</p>;
+
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      {/* Recent Bugs */}
+      <div className="bg-white border border-gray-200 rounded-lg p-5">
+        <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-4">Recent Bugs</h3>
+        {recent_bugs.length === 0 ? (
+          <p className="text-sm text-gray-400">No bugs reported.</p>
+        ) : (
+          <div className="space-y-3">
+            {recent_bugs.map((bug) => (
+              <div key={bug.id} className="flex items-start gap-3 py-2 border-b border-gray-100 last:border-0">
+                <span className={`mt-0.5 inline-block px-2 py-0.5 text-xs font-medium rounded flex-shrink-0 ${severityColors[bug.severity] || ''}`}>
+                  {bug.severity}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium text-gray-800 truncate">{bug.title}</p>
+                  <p className="text-xs text-gray-400">
+                    {bug.reported_by_name && `by ${bug.reported_by_name} · `}{formatDate(bug.created_at)}
+                  </p>
+                </div>
+                <span className={`text-xs px-2 py-0.5 rounded font-medium flex-shrink-0 ${
+                  bug.status === 'open' ? 'bg-red-50 text-red-700' :
+                  bug.status === 'in_progress' ? 'bg-yellow-50 text-yellow-700' :
+                  'bg-gray-100 text-gray-600'
+                }`}>{bug.status}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Recent Test Executions */}
+      <div className="bg-white border border-gray-200 rounded-lg p-5">
+        <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-4">Recent Test Executions</h3>
+        {recent_results.length === 0 ? (
+          <p className="text-sm text-gray-400">No test executions yet.</p>
+        ) : (
+          <div className="space-y-3">
+            {recent_results.map((r, i) => (
+              <div key={i} className="flex items-start gap-3 py-2 border-b border-gray-100 last:border-0">
+                <span className={`mt-0.5 inline-block px-2 py-0.5 text-xs font-medium rounded flex-shrink-0 ${resultStatusColors[r.status] || ''}`}>
+                  {r.status}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium text-gray-800 truncate">{r.test_case_title}</p>
+                  <p className="text-xs text-gray-400">
+                    {r.test_run_name}{r.executed_by_name && ` · ${r.executed_by_name}`}{r.executed_at && ` · ${formatDate(r.executed_at)}`}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── Main Component ───────────────────────────────────────────
 export default function ProjectDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
   const [project, setProject] = useState(null);
   const [allMembers, setAllMembers] = useState([]);
-  const [selectedMember, setSelectedMember] = useState('');
-  const [testScripts, setTestScripts] = useState([]);
+  const [testScriptCount, setTestScriptCount] = useState(0);
+  const [activeTab, setActiveTab] = useState('overview');
   const [error, setError] = useState(null);
 
   const fetchData = async () => {
@@ -32,7 +448,7 @@ export default function ProjectDetail() {
       ]);
       setProject(projectData);
       setAllMembers(membersData);
-      setTestScripts(scriptsData);
+      setTestScriptCount(scriptsData.length);
       setError(null);
     } catch (err) {
       setError(err.message);
@@ -51,11 +467,9 @@ export default function ProjectDetail() {
     }
   };
 
-  const handleAddMember = async () => {
-    if (!selectedMember) return;
+  const handleAddMember = async (memberId) => {
     try {
-      await addProjectMembers(id, [Number(selectedMember)]);
-      setSelectedMember('');
+      await addProjectMembers(id, [Number(memberId)]);
       fetchData();
     } catch (err) {
       setError(err.message);
@@ -72,132 +486,86 @@ export default function ProjectDetail() {
     }
   };
 
-  if (error && !project) return <div className="p-3 bg-red-50 text-red-700 rounded-md text-sm">{error}</div>;
+  if (error && !project) return <div className="p-3 bg-red-50 text-red-700 rounded-lg text-sm">{error}</div>;
   if (!project) return <p className="text-gray-500">Loading...</p>;
 
-  const assignedIds = new Set(project.members.map((m) => m.id));
-  const availableMembers = allMembers.filter((m) => !assignedIds.has(m.id));
+  const tabs = [
+    { key: 'overview', label: 'Overview' },
+    { key: 'test-scripts', label: `Test Scripts (${testScriptCount})` },
+    { key: 'activity', label: 'Activity' },
+  ];
 
   return (
-    <div className="max-w-2xl">
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <Link to="/projects" className="text-sm text-blue-600 hover:text-blue-800 mb-1 inline-block">&larr; Back to Projects</Link>
-          <h2 className="text-2xl font-bold text-gray-800">{project.name}</h2>
-        </div>
-        <div className="flex gap-2">
-          <Link to={`/projects/${id}/edit`} className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700">Edit</Link>
-          <button onClick={handleDelete} className="px-4 py-2 bg-red-600 text-white text-sm font-medium rounded-md hover:bg-red-700">Delete</button>
+    <div>
+      {/* Header */}
+      <div className="mb-6">
+        <Link to="/projects" className="text-sm text-blue-600 hover:text-blue-800 mb-2 inline-block">&larr; Back to Projects</Link>
+        <div className="flex items-start justify-between">
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-3 mb-1">
+              <h2 className="text-2xl font-bold text-gray-800 truncate">{project.name}</h2>
+              <span className={`inline-block px-2.5 py-1 text-xs font-medium rounded-full flex-shrink-0 ${statusColors[project.status] || ''}`}>
+                {statusLabels[project.status] || project.status}
+              </span>
+            </div>
+            {project.description && (
+              <p className="text-sm text-gray-500 mb-1">{project.description}</p>
+            )}
+            <p className="text-xs text-gray-400">
+              {project.created_by_name && `Created by ${project.created_by_name}`}
+              {project.created_by_name && project.updated_at && ' \u00B7 '}
+              {project.updated_at && `Updated ${formatDate(project.updated_at)}`}
+            </p>
+          </div>
+          <div className="flex items-center gap-2 ml-4 flex-shrink-0">
+            <Link
+              to={`/projects/${id}/edit`}
+              className="px-5 py-2.5 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
+            >
+              Edit
+            </Link>
+            <OverflowMenu onDelete={handleDelete} hasTestScripts={testScriptCount > 0} />
+          </div>
         </div>
       </div>
 
-      {error && <div className="mb-4 p-3 bg-red-50 text-red-700 rounded-md text-sm">{error}</div>}
+      {error && <div className="mb-4 p-3 bg-red-50 text-red-700 rounded-lg text-sm">{error}</div>}
 
-      <div className="bg-white border border-gray-200 rounded-lg p-6 space-y-5">
-        {/* Status */}
-        <div className="flex gap-3 items-center">
-          <span className={`inline-block px-2 py-0.5 text-xs font-medium rounded ${statusColors[project.status] || ''}`}>
-            {statusLabels[project.status] || project.status}
-          </span>
-          {project.created_by_name && (
-            <span className="text-sm text-gray-500">Created by {project.created_by_name}</span>
-          )}
-        </div>
-
-        {/* Description */}
-        {project.description && (
-          <div>
-            <h3 className="text-sm font-medium text-gray-500 mb-1">Description</h3>
-            <p className="text-sm text-gray-800 whitespace-pre-wrap">{project.description}</p>
-          </div>
-        )}
-
-        {/* Members */}
-        <div>
-          <h3 className="text-sm font-medium text-gray-500 mb-2">Members ({project.members.length})</h3>
-          {project.members.length === 0 ? (
-            <p className="text-sm text-gray-400">No members assigned.</p>
-          ) : (
-            <ul className="space-y-1 mb-3">
-              {project.members.map((member) => (
-                <li key={member.id} className="flex items-center justify-between py-1.5 px-3 bg-gray-50 rounded-md">
-                  <span className="text-sm text-gray-800">
-                    {member.name} <span className="text-gray-400">({member.role})</span>
-                  </span>
-                  <button
-                    onClick={() => handleRemoveMember(member.id)}
-                    className="text-xs text-red-600 hover:text-red-800"
-                  >
-                    Remove
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-
-          {availableMembers.length > 0 && (
-            <div className="flex gap-2">
-              <select
-                value={selectedMember}
-                onChange={(e) => setSelectedMember(e.target.value)}
-                className="px-3 py-2 border border-gray-300 rounded-md text-sm flex-1"
-              >
-                <option value="">— Select member to add —</option>
-                {availableMembers.map((m) => (
-                  <option key={m.id} value={m.id}>{m.name} ({m.role})</option>
-                ))}
-              </select>
-              <button
-                onClick={handleAddMember}
-                className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700"
-              >
-                Add
-              </button>
-            </div>
-          )}
-        </div>
-
-        {/* Test Scripts */}
-        <div>
-          <div className="flex items-center justify-between mb-2">
-            <h3 className="text-sm font-medium text-gray-500">Test Scripts ({testScripts.length})</h3>
-            <div className="flex gap-2">
-              <a href={exportProjectTestScriptsUrl(id)} className="text-xs text-green-600 hover:text-green-800">Download</a>
-              <Link to={`/projects/${id}/test-scripts`} className="text-xs text-blue-600 hover:text-blue-800">View All</Link>
-              <Link to={`/projects/${id}/test-scripts/new`} className="text-xs text-blue-600 hover:text-blue-800">+ New</Link>
-            </div>
-          </div>
-          {testScripts.length === 0 ? (
-            <p className="text-sm text-gray-400">No test scripts yet.</p>
-          ) : (
-            <div className="space-y-1">
-              {testScripts.slice(0, 5).map((ts) => (
-                <Link key={ts.id} to={`/projects/${id}/test-scripts/${ts.id}`} className="flex items-center justify-between py-1.5 px-3 bg-gray-50 rounded-md hover:bg-gray-100">
-                  <span className="text-sm text-gray-800 truncate mr-3">{ts.title}</span>
-                  <div className="flex gap-2 flex-shrink-0">
-                    <span className={`px-2 py-0.5 text-xs font-medium rounded ${
-                      { critical: 'bg-red-100 text-red-800', high: 'bg-orange-100 text-orange-800', medium: 'bg-yellow-100 text-yellow-800', low: 'bg-green-100 text-green-800' }[ts.priority] || ''
-                    }`}>{ts.priority}</span>
-                    <span className={`px-2 py-0.5 text-xs font-medium rounded ${
-                      { draft: 'bg-gray-100 text-gray-800', ready: 'bg-blue-100 text-blue-800', deprecated: 'bg-red-50 text-red-600' }[ts.status] || ''
-                    }`}>{ts.status}</span>
-                  </div>
-                </Link>
-              ))}
-              {testScripts.length > 5 && (
-                <Link to={`/projects/${id}/test-scripts`} className="block text-center text-sm text-blue-600 hover:text-blue-800 py-1">
-                  View all {testScripts.length} test scripts
-                </Link>
-              )}
-            </div>
-          )}
-        </div>
-
-        <div className="border-t border-gray-200 pt-4 text-xs text-gray-400 space-y-1">
-          <p>Created: {project.created_at}</p>
-          <p>Updated: {project.updated_at}</p>
-        </div>
+      {/* Tabs */}
+      <div className="border-b border-gray-200 mb-6">
+        <nav className="flex gap-6">
+          {tabs.map((tab) => (
+            <button
+              key={tab.key}
+              onClick={() => setActiveTab(tab.key)}
+              className={`pb-3 text-sm font-medium transition-colors border-b-2 ${
+                activeTab === tab.key
+                  ? 'border-blue-600 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </nav>
       </div>
+
+      {/* Tab Content */}
+      {activeTab === 'overview' && (
+        <OverviewTab
+          project={project}
+          allMembers={allMembers}
+          onAddMember={handleAddMember}
+          onRemoveMember={handleRemoveMember}
+          testScriptCount={testScriptCount}
+        />
+      )}
+      {activeTab === 'test-scripts' && (
+        <TestScriptsTab projectId={id} />
+      )}
+      {activeTab === 'activity' && (
+        <ActivityTab projectId={id} />
+      )}
     </div>
   );
 }

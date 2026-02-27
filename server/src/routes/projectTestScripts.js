@@ -334,4 +334,41 @@ router.post('/upload', upload.single('file'), (req, res) => {
   }
 });
 
+// POST /api/projects/:projectId/test-scripts/batch — bulk import generated test scripts
+router.post('/batch', (req, res) => {
+  const { projectId } = req.params;
+  const { scripts } = req.body;
+
+  if (!scripts || !Array.isArray(scripts) || scripts.length === 0) {
+    return res.status(400).json({ error: 'scripts array is required' });
+  }
+
+  const project = db.prepare('SELECT id FROM projects WHERE id = ?').get(projectId);
+  if (!project) {
+    return res.status(404).json({ error: 'Project not found' });
+  }
+
+  const stmt = db.prepare(`
+    INSERT INTO test_cases (title, module, description, steps, expected_result, priority, status, project_id)
+    VALUES (?, ?, ?, ?, ?, ?, 'draft', ?)
+  `);
+
+  let imported = 0;
+  for (const s of scripts) {
+    if (!s.title) continue;
+    stmt.run(
+      s.title,
+      s.module || null,
+      s.preconditions || null,
+      s.steps || null,
+      s.expected_result || null,
+      s.priority || 'medium',
+      projectId,
+    );
+    imported++;
+  }
+
+  res.json({ imported, total: scripts.length });
+});
+
 module.exports = router;
