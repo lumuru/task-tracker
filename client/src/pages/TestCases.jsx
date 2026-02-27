@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { getTestCases, getModules } from '../api/testCases';
+import { getProjects } from '../api/projects';
 
 const PRIORITIES = ['critical', 'high', 'medium', 'low'];
 const STATUSES = ['draft', 'ready', 'deprecated'];
@@ -22,6 +23,7 @@ export default function TestCases() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [testCases, setTestCases] = useState([]);
   const [modules, setModules] = useState([]);
+  const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [search, setSearch] = useState(searchParams.get('search') || '');
@@ -31,19 +33,22 @@ export default function TestCases() {
     priority: searchParams.get('priority') || '',
     status: searchParams.get('status') || '',
     search: searchParams.get('search') || '',
+    project: searchParams.get('project') || '',
   };
 
   const fetchData = async () => {
     try {
       setLoading(true);
       const activeFilters = {};
-      Object.entries(filters).forEach(([k, v]) => { if (v) activeFilters[k] = v; });
-      const [cases, mods] = await Promise.all([
+      Object.entries(filters).forEach(([k, v]) => { if (v && k !== 'project') activeFilters[k] = v; });
+      const [cases, mods, projs] = await Promise.all([
         getTestCases(activeFilters),
         getModules(),
+        getProjects(),
       ]);
       setTestCases(cases);
       setModules(mods);
+      setProjects(projs);
       setError(null);
     } catch (err) {
       setError(err.message);
@@ -51,6 +56,13 @@ export default function TestCases() {
       setLoading(false);
     }
   };
+
+  const filteredTestCases = filters.project
+    ? testCases.filter(tc => {
+        if (filters.project === 'unassigned') return !tc.project_id;
+        return String(tc.project_id) === filters.project;
+      })
+    : testCases;
 
   useEffect(() => {
     fetchData();
@@ -100,6 +112,16 @@ export default function TestCases() {
         </form>
 
         <select
+          value={filters.project}
+          onChange={(e) => updateFilter('project', e.target.value)}
+          className="px-3 py-2 border border-gray-300 rounded-md text-sm"
+        >
+          <option value="">All Projects</option>
+          {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+          <option value="unassigned">Unassigned</option>
+        </select>
+
+        <select
           value={filters.module}
           onChange={(e) => updateFilter('module', e.target.value)}
           className="px-3 py-2 border border-gray-300 rounded-md text-sm"
@@ -130,7 +152,7 @@ export default function TestCases() {
       {/* Table */}
       {loading ? (
         <p className="text-gray-500">Loading...</p>
-      ) : testCases.length === 0 ? (
+      ) : filteredTestCases.length === 0 ? (
         <p className="text-gray-500">No test cases found. Create one to get started.</p>
       ) : (
         <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
@@ -146,7 +168,7 @@ export default function TestCases() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
-              {testCases.map((tc) => (
+              {filteredTestCases.map((tc) => (
                 <tr key={tc.id} className="hover:bg-gray-50">
                   <td className="px-4 py-3">
                     {tc.project_id ? (

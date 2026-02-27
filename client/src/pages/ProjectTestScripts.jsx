@@ -11,6 +11,17 @@ import {
 const PRIORITIES = ['critical', 'high', 'medium', 'low'];
 const STATUSES = ['draft', 'ready', 'deprecated'];
 
+const PRIORITY_ORDER = { critical: 0, high: 1, medium: 2, low: 3 };
+const STATUS_ORDER = { draft: 0, ready: 1, deprecated: 2 };
+
+const SORTABLE_COLUMNS = [
+  { key: 'title', label: 'Title' },
+  { key: 'module', label: 'Module' },
+  { key: 'priority', label: 'Priority' },
+  { key: 'status', label: 'Status' },
+  { key: 'created_by_name', label: 'Created By' },
+];
+
 const priorityColors = {
   critical: 'bg-red-100 text-red-800',
   high: 'bg-orange-100 text-orange-800',
@@ -35,6 +46,42 @@ export default function ProjectTestScripts() {
   const [search, setSearch] = useState(searchParams.get('search') || '');
   const [uploadResult, setUploadResult] = useState(null);
   const [uploading, setUploading] = useState(false);
+  const [sortKey, setSortKey] = useState('updated_at');
+  const [sortDir, setSortDir] = useState('desc');
+
+  const handleSort = (key) => {
+    if (sortKey === key) {
+      setSortDir(prev => prev === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortKey(key);
+      setSortDir('asc');
+    }
+  };
+
+  const sortedScripts = [...testScripts].sort((a, b) => {
+    let aVal = a[sortKey];
+    let bVal = b[sortKey];
+
+    if (sortKey === 'priority') {
+      aVal = PRIORITY_ORDER[aVal] ?? 99;
+      bVal = PRIORITY_ORDER[bVal] ?? 99;
+    } else if (sortKey === 'status') {
+      aVal = STATUS_ORDER[aVal] ?? 99;
+      bVal = STATUS_ORDER[bVal] ?? 99;
+    } else {
+      aVal = (aVal || '').toString().toLowerCase();
+      bVal = (bVal || '').toString().toLowerCase();
+    }
+
+    if (aVal < bVal) return sortDir === 'asc' ? -1 : 1;
+    if (aVal > bVal) return sortDir === 'asc' ? 1 : -1;
+    return 0;
+  });
+
+  const sortIndicator = (key) => {
+    if (sortKey !== key) return ' \u2195';
+    return sortDir === 'asc' ? ' \u2191' : ' \u2193';
+  };
 
   const filters = {
     module: searchParams.get('module') || '',
@@ -217,16 +264,20 @@ export default function ProjectTestScripts() {
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Title</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Module</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Priority</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Created By</th>
+                  {SORTABLE_COLUMNS.map(({ key, label }) => (
+                    <th
+                      key={key}
+                      onClick={() => handleSort(key)}
+                      className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase cursor-pointer hover:text-gray-700 select-none"
+                    >
+                      {label}{sortIndicator(key)}
+                    </th>
+                  ))}
                   <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
-                {testScripts.map((ts) => (
+                {sortedScripts.map((ts) => (
                   <tr key={ts.id} className="hover:bg-gray-50">
                     <td className="px-4 py-3">
                       <Link to={`/projects/${projectId}/test-scripts/${ts.id}`} className="text-sm text-blue-600 hover:text-blue-800 font-medium">
