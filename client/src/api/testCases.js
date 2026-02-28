@@ -6,6 +6,7 @@ export async function getTestCases(filters = {}) {
   if (filters.priority) params.set('priority', filters.priority);
   if (filters.status) params.set('status', filters.status);
   if (filters.search) params.set('search', filters.search);
+  if (filters.project_id) params.set('project_id', filters.project_id);
 
   const query = params.toString();
   const res = await fetch(`${BASE_URL}/api/test-cases${query ? '?' + query : ''}`);

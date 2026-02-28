@@ -349,8 +349,8 @@ router.post('/batch', (req, res) => {
   }
 
   const stmt = db.prepare(`
-    INSERT INTO test_cases (title, module, description, steps, expected_result, priority, status, project_id)
-    VALUES (?, ?, ?, ?, ?, ?, 'draft', ?)
+    INSERT INTO test_cases (title, module, description, preconditions, steps, expected_result, priority, status, project_id)
+    VALUES (?, ?, ?, ?, ?, ?, ?, 'draft', ?)
   `);
 
   let imported = 0;
@@ -359,6 +359,7 @@ router.post('/batch', (req, res) => {
     stmt.run(
       s.title,
       s.module || null,
+      s.description || null,
       s.preconditions || null,
       s.steps || null,
       s.expected_result || null,

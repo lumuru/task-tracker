@@ -6,7 +6,7 @@ const router = express.Router();
 // GET /api/test-runs — list all runs with summary counts
 router.get('/', (req, res) => {
   const runs = db.prepare(`
-    SELECT tr.*, tm.name as created_by_name,
+    SELECT tr.*, tm.name as created_by_name, p.name as project_name,
       (SELECT COUNT(*) FROM test_results WHERE test_run_id = tr.id) as total,
       (SELECT COUNT(*) FROM test_results WHERE test_run_id = tr.id AND status = 'pass') as passed,
       (SELECT COUNT(*) FROM test_results WHERE test_run_id = tr.id AND status = 'fail') as failed,
@@ -14,6 +14,7 @@ router.get('/', (req, res) => {
       (SELECT COUNT(*) FROM test_results WHERE test_run_id = tr.id AND status = 'skipped') as skipped
     FROM test_runs tr
     LEFT JOIN team_members tm ON tr.created_by = tm.id
+    LEFT JOIN projects p ON tr.project_id = p.id
     ORDER BY tr.created_at DESC
   `).all();
   res.json(runs);
@@ -47,7 +48,7 @@ router.get('/:id', (req, res) => {
 
 // POST /api/test-runs — create a new run with linked test cases
 router.post('/', (req, res) => {
-  const { name, environment, date, created_by, test_case_ids } = req.body;
+  const { name, environment, date, created_by, project_id, test_case_ids } = req.body;
 
   if (!name || !name.trim()) {
     return res.status(400).json({ error: 'Name is required' });
@@ -58,8 +59,8 @@ router.post('/', (req, res) => {
 
   const create = db.transaction(() => {
     const result = db.prepare(
-      'INSERT INTO test_runs (name, environment, date, created_by) VALUES (?, ?, ?, ?)'
-    ).run(name.trim(), environment || null, date || null, created_by || null);
+      'INSERT INTO test_runs (name, environment, date, created_by, project_id) VALUES (?, ?, ?, ?, ?)'
+    ).run(name.trim(), environment || null, date || null, created_by || null, project_id || null);
 
     const runId = result.lastInsertRowid;
 

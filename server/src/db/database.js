@@ -102,4 +102,17 @@ if (!hasProjectId) {
 // Create index after migration ensures column exists
 db.exec("CREATE INDEX IF NOT EXISTS idx_test_cases_project_id ON test_cases(project_id)");
 
+// Migration: add preconditions column to test_cases if it doesn't exist
+const tcCols2 = db.prepare("PRAGMA table_info(test_cases)").all();
+if (!tcCols2.some(c => c.name === 'preconditions')) {
+  db.exec("ALTER TABLE test_cases ADD COLUMN preconditions TEXT");
+}
+
+// Migration: add project_id column to test_runs if it doesn't exist
+const runColumns = db.prepare("PRAGMA table_info(test_runs)").all();
+const runHasProjectId = runColumns.some(c => c.name === 'project_id');
+if (!runHasProjectId) {
+  db.exec("ALTER TABLE test_runs ADD COLUMN project_id INTEGER REFERENCES projects(id)");
+}
+
 module.exports = db;

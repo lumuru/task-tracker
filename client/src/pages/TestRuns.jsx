@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { getTestRuns, createTestRun } from '../api/testRuns';
 import { getTestCases } from '../api/testCases';
 import { getMembers } from '../api/members';
+import { getProjects } from '../api/projects';
 
 export default function TestRuns() {
   const [runs, setRuns] = useState([]);
@@ -11,11 +12,13 @@ export default function TestRuns() {
   const [showForm, setShowForm] = useState(false);
 
   // Form state
+  const [projects, setProjects] = useState([]);
   const [testCases, setTestCases] = useState([]);
   const [members, setMembers] = useState([]);
-  const [form, setForm] = useState({ name: '', environment: '', date: '', created_by: '' });
+  const [form, setForm] = useState({ name: '', environment: '', date: '', created_by: '', project_id: '' });
   const [selectedCases, setSelectedCases] = useState([]);
   const [formError, setFormError] = useState(null);
+  const [loadingCases, setLoadingCases] = useState(false);
 
   const fetchRuns = async () => {
     try {
@@ -33,18 +36,35 @@ export default function TestRuns() {
 
   const openForm = async () => {
     try {
-      const [cases, mems] = await Promise.all([
-        getTestCases({ status: 'ready' }),
+      const [projs, mems] = await Promise.all([
+        getProjects({ status: 'active' }),
         getMembers(),
       ]);
-      setTestCases(cases);
+      setProjects(projs);
       setMembers(mems);
-      setForm({ name: '', environment: '', date: new Date().toISOString().slice(0, 10), created_by: '' });
+      setTestCases([]);
+      setForm({ name: '', environment: '', date: new Date().toISOString().slice(0, 10), created_by: '', project_id: '' });
       setSelectedCases([]);
       setFormError(null);
       setShowForm(true);
     } catch (err) {
       setError(err.message);
+    }
+  };
+
+  const handleProjectChange = async (projectId) => {
+    setForm((prev) => ({ ...prev, project_id: projectId }));
+    setSelectedCases([]);
+    setTestCases([]);
+    if (!projectId) return;
+    setLoadingCases(true);
+    try {
+      const cases = await getTestCases({ status: 'ready', project_id: projectId });
+      setTestCases(cases);
+    } catch (err) {
+      setFormError(err.message);
+    } finally {
+      setLoadingCases(false);
     }
   };
 
@@ -65,6 +85,7 @@ export default function TestRuns() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!form.name.trim()) { setFormError('Name is required'); return; }
+    if (!form.project_id) { setFormError('Project is required'); return; }
     if (selectedCases.length === 0) { setFormError('Select at least one test case'); return; }
 
     try {
@@ -136,16 +157,29 @@ export default function TestRuns() {
             </div>
           </div>
 
-          <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-700 mb-1">Created By</label>
-            <select
-              value={form.created_by}
-              onChange={(e) => setForm({ ...form, created_by: e.target.value })}
-              className="px-3 py-2 border border-gray-300 rounded-md text-sm"
-            >
-              <option value="">— Select —</option>
-              {members.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-            </select>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Project *</label>
+              <select
+                value={form.project_id}
+                onChange={(e) => handleProjectChange(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="">— Select Project —</option>
+                {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Created By</label>
+              <select
+                value={form.created_by}
+                onChange={(e) => setForm({ ...form, created_by: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="">— Select —</option>
+                {members.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+              </select>
+            </div>
           </div>
 
           <div className="mb-4">
@@ -157,8 +191,12 @@ export default function TestRuns() {
                 {selectedCases.length === testCases.length ? 'Deselect All' : 'Select All'}
               </button>
             </div>
-            {testCases.length === 0 ? (
-              <p className="text-sm text-gray-500">No test cases with "Ready" status. Mark test cases as Ready first.</p>
+            {!form.project_id ? (
+              <p className="text-sm text-gray-500">Select a project first to load its test cases.</p>
+            ) : loadingCases ? (
+              <p className="text-sm text-gray-500">Loading test cases...</p>
+            ) : testCases.length === 0 ? (
+              <p className="text-sm text-gray-500">No test cases with "Ready" status in this project.</p>
             ) : (
               <div className="max-h-48 overflow-y-auto border border-gray-200 rounded-md">
                 {testCases.map((tc) => (
@@ -198,6 +236,7 @@ export default function TestRuns() {
             <thead className="bg-gray-50">
               <tr>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Project</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Environment</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Results</th>
@@ -213,6 +252,7 @@ export default function TestRuns() {
                       {run.name}
                     </Link>
                   </td>
+                  <td className="px-4 py-3 text-sm text-gray-500">{run.project_name || '—'}</td>
                   <td className="px-4 py-3 text-sm text-gray-500">{run.date || '—'}</td>
                   <td className="px-4 py-3 text-sm text-gray-500">{run.environment || '—'}</td>
                   <td className="px-4 py-3">

@@ -8,7 +8,7 @@ const router = express.Router();
 
 // GET /api/test-cases — list with optional filters
 router.get('/', (req, res) => {
-  const { module, priority, status, search } = req.query;
+  const { module, priority, status, search, project_id } = req.query;
 
   let sql = `SELECT tc.*, tm.name as created_by_name, p.name as project_name
     FROM test_cases tc
@@ -28,6 +28,10 @@ router.get('/', (req, res) => {
   if (status) {
     conditions.push('tc.status = ?');
     params.push(status);
+  }
+  if (project_id) {
+    conditions.push('tc.project_id = ?');
+    params.push(project_id);
   }
   if (search) {
     conditions.push('(tc.title LIKE ? OR tc.description LIKE ?)');
@@ -120,6 +124,21 @@ router.post('/upload', upload.single('file'), (req, res) => {
   } catch (err) {
     res.status(400).json({ error: 'Failed to parse Excel file: ' + err.message });
   }
+});
+
+// GET /api/test-cases/:id/executions — execution history for a test case
+router.get('/:id/executions', (req, res) => {
+  const executions = db.prepare(`
+    SELECT r.status, r.notes, r.executed_at,
+           tr.id as run_id, tr.name as run_name, tr.date as run_date,
+           tm.name as executed_by_name
+    FROM test_results r
+    JOIN test_runs tr ON r.test_run_id = tr.id
+    LEFT JOIN team_members tm ON r.executed_by = tm.id
+    WHERE r.test_case_id = ?
+    ORDER BY r.executed_at DESC
+  `).all(req.params.id);
+  res.json(executions);
 });
 
 // GET /api/test-cases/:id
