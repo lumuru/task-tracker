@@ -10,7 +10,10 @@ const router = express.Router();
 router.get('/', (req, res) => {
   const { module, priority, status, search, project_id } = req.query;
 
-  let sql = `SELECT tc.*, tm.name as created_by_name, p.name as project_name
+  let sql = `SELECT tc.*, tm.name as created_by_name, p.name as project_name,
+    (SELECT r.status FROM test_results r JOIN test_runs tr ON r.test_run_id = tr.id WHERE r.test_case_id = tc.id ORDER BY r.executed_at DESC LIMIT 1) as last_exec_status,
+    (SELECT r.executed_at FROM test_results r JOIN test_runs tr ON r.test_run_id = tr.id WHERE r.test_case_id = tc.id ORDER BY r.executed_at DESC LIMIT 1) as last_exec_date,
+    (SELECT COUNT(*) FROM bugs b WHERE b.test_case_id = tc.id) as bug_count
     FROM test_cases tc
     LEFT JOIN team_members tm ON tc.created_by = tm.id
     LEFT JOIN projects p ON tc.project_id = p.id`;
