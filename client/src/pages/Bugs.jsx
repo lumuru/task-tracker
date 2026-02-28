@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { getBugs, getBugModules, deleteBug } from '../api/bugs';
 import { getMembers } from '../api/members';
+import FuzzyFilter from '../components/FuzzyFilter';
 
 const SEVERITIES = ['critical', 'major', 'minor', 'trivial'];
 const PRIORITIES = ['P1', 'P2', 'P3', 'P4'];
@@ -125,30 +126,40 @@ export default function Bugs() {
           <button type="submit" className="px-3 py-2 bg-gray-100 text-gray-700 text-sm rounded-md hover:bg-gray-200">Search</button>
         </form>
 
-        <select value={filters.status} onChange={(e) => updateFilter('status', e.target.value)} className="px-3 py-2 border border-gray-300 rounded-md text-sm">
-          <option value="">All Statuses</option>
-          {STATUSES.map(s => <option key={s} value={s}>{statusLabels[s]}</option>)}
-        </select>
+        <FuzzyFilter
+          options={STATUSES.map(s => ({ value: s, label: statusLabels[s] }))}
+          value={filters.status}
+          onChange={(v) => updateFilter('status', v)}
+          placeholder="All Statuses"
+        />
 
-        <select value={filters.severity} onChange={(e) => updateFilter('severity', e.target.value)} className="px-3 py-2 border border-gray-300 rounded-md text-sm">
-          <option value="">All Severities</option>
-          {SEVERITIES.map(s => <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>)}
-        </select>
+        <FuzzyFilter
+          options={SEVERITIES.map(s => ({ value: s, label: s.charAt(0).toUpperCase() + s.slice(1) }))}
+          value={filters.severity}
+          onChange={(v) => updateFilter('severity', v)}
+          placeholder="All Severities"
+        />
 
-        <select value={filters.priority} onChange={(e) => updateFilter('priority', e.target.value)} className="px-3 py-2 border border-gray-300 rounded-md text-sm">
-          <option value="">All Priorities</option>
-          {PRIORITIES.map(p => <option key={p} value={p}>{p}</option>)}
-        </select>
+        <FuzzyFilter
+          options={PRIORITIES.map(p => ({ value: p, label: p }))}
+          value={filters.priority}
+          onChange={(v) => updateFilter('priority', v)}
+          placeholder="All Priorities"
+        />
 
-        <select value={filters.assigned_to} onChange={(e) => updateFilter('assigned_to', e.target.value)} className="px-3 py-2 border border-gray-300 rounded-md text-sm">
-          <option value="">All Assignees</option>
-          {members.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-        </select>
+        <FuzzyFilter
+          options={members.map(m => ({ value: String(m.id), label: m.name }))}
+          value={filters.assigned_to}
+          onChange={(v) => updateFilter('assigned_to', v)}
+          placeholder="All Assignees"
+        />
 
-        <select value={filters.module} onChange={(e) => updateFilter('module', e.target.value)} className="px-3 py-2 border border-gray-300 rounded-md text-sm">
-          <option value="">All Modules</option>
-          {modules.map(m => <option key={m} value={m}>{m}</option>)}
-        </select>
+        <FuzzyFilter
+          options={modules.map(m => ({ value: m, label: m }))}
+          value={filters.module}
+          onChange={(v) => updateFilter('module', v)}
+          placeholder="All Modules"
+        />
       </div>
 
       {/* Table */}

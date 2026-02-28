@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { getTestCases, getModules } from '../api/testCases';
 import { getProjects } from '../api/projects';
+import FuzzyFilter from '../components/FuzzyFilter';
 
 const PRIORITIES = ['critical', 'high', 'medium', 'low'];
 const STATUSES = ['draft', 'ready', 'deprecated'];
@@ -210,42 +211,33 @@ export default function TestCases() {
           </button>
         </form>
 
-        <select
+        <FuzzyFilter
+          options={[...projects.map(p => ({ value: String(p.id), label: p.name })), { value: 'unassigned', label: 'Unassigned' }]}
           value={filters.project}
-          onChange={(e) => updateFilter('project', e.target.value)}
-          className="px-3 py-2 border border-gray-300 rounded-md text-sm"
-        >
-          <option value="">All Projects</option>
-          {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-          <option value="unassigned">Unassigned</option>
-        </select>
+          onChange={(v) => updateFilter('project', v)}
+          placeholder="All Projects"
+        />
 
-        <select
+        <FuzzyFilter
+          options={modules.map(m => ({ value: m, label: m }))}
           value={filters.module}
-          onChange={(e) => updateFilter('module', e.target.value)}
-          className="px-3 py-2 border border-gray-300 rounded-md text-sm"
-        >
-          <option value="">All Modules</option>
-          {modules.map(m => <option key={m} value={m}>{m}</option>)}
-        </select>
+          onChange={(v) => updateFilter('module', v)}
+          placeholder="All Modules"
+        />
 
-        <select
+        <FuzzyFilter
+          options={PRIORITIES.map(p => ({ value: p, label: capitalize(p) }))}
           value={filters.priority}
-          onChange={(e) => updateFilter('priority', e.target.value)}
-          className="px-3 py-2 border border-gray-300 rounded-md text-sm"
-        >
-          <option value="">All Priorities</option>
-          {PRIORITIES.map(p => <option key={p} value={p}>{capitalize(p)}</option>)}
-        </select>
+          onChange={(v) => updateFilter('priority', v)}
+          placeholder="All Priorities"
+        />
 
-        <select
+        <FuzzyFilter
+          options={STATUSES.map(s => ({ value: s, label: capitalize(s) }))}
           value={filters.status}
-          onChange={(e) => updateFilter('status', e.target.value)}
-          className="px-3 py-2 border border-gray-300 rounded-md text-sm"
-        >
-          <option value="">All Statuses</option>
-          {STATUSES.map(s => <option key={s} value={s}>{capitalize(s)}</option>)}
-        </select>
+          onChange={(v) => updateFilter('status', v)}
+          placeholder="All Statuses"
+        />
       </div>
 
       {/* Table */}

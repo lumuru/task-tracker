@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
+import FuzzyFilter from '../components/FuzzyFilter';
 import { getProject } from '../api/projects';
 import {
   getProjectTestScripts,
@@ -232,32 +233,26 @@ export default function ProjectTestScripts() {
           </button>
         </form>
 
-        <select
+        <FuzzyFilter
+          options={modules.map(m => ({ value: m, label: m }))}
           value={filters.module}
-          onChange={(e) => updateFilter('module', e.target.value)}
-          className="px-3 py-2 border border-gray-300 rounded-md text-sm"
-        >
-          <option value="">All Modules</option>
-          {modules.map(m => <option key={m} value={m}>{m}</option>)}
-        </select>
+          onChange={(v) => updateFilter('module', v)}
+          placeholder="All Modules"
+        />
 
-        <select
+        <FuzzyFilter
+          options={PRIORITIES.map(p => ({ value: p, label: p.charAt(0).toUpperCase() + p.slice(1) }))}
           value={filters.priority}
-          onChange={(e) => updateFilter('priority', e.target.value)}
-          className="px-3 py-2 border border-gray-300 rounded-md text-sm"
-        >
-          <option value="">All Priorities</option>
-          {PRIORITIES.map(p => <option key={p} value={p}>{p.charAt(0).toUpperCase() + p.slice(1)}</option>)}
-        </select>
+          onChange={(v) => updateFilter('priority', v)}
+          placeholder="All Priorities"
+        />
 
-        <select
+        <FuzzyFilter
+          options={STATUSES.map(s => ({ value: s, label: s.charAt(0).toUpperCase() + s.slice(1) }))}
           value={filters.status}
-          onChange={(e) => updateFilter('status', e.target.value)}
-          className="px-3 py-2 border border-gray-300 rounded-md text-sm"
-        >
-          <option value="">All Statuses</option>
-          {STATUSES.map(s => <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>)}
-        </select>
+          onChange={(v) => updateFilter('status', v)}
+          placeholder="All Statuses"
+        />
       </div>
 
       {/* Table */}

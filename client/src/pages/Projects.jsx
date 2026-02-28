@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { getProjects, deleteProject } from '../api/projects';
+import FuzzyFilter from '../components/FuzzyFilter';
 
 const statusColors = {
   active: 'bg-green-100 text-green-800',
@@ -118,15 +119,12 @@ export default function Projects() {
           placeholder="Search projects..."
           className="px-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 w-72"
         />
-        <select
+        <FuzzyFilter
+          options={[{ value: 'active', label: 'Active' }, { value: 'archived', label: 'Archived' }]}
           value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
-          className="px-4 py-2.5 border border-gray-300 rounded-lg text-sm"
-        >
-          <option value="">All Statuses</option>
-          <option value="active">Active</option>
-          <option value="archived">Archived</option>
-        </select>
+          onChange={setStatusFilter}
+          placeholder="All Statuses"
+        />
       </div>
 
       {error && <div className="mb-4 p-3 bg-red-50 text-red-700 rounded-lg text-sm">{error}</div>}

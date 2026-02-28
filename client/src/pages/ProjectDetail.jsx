@@ -1,5 +1,6 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
+import FuzzyFilter, { fuzzyMatch } from '../components/FuzzyFilter';
 import { getProject, deleteProject, addProjectMembers, removeProjectMember, getProjectActivity } from '../api/projects';
 import { getMembers } from '../api/members';
 import { getProjectTestScripts, getProjectTestScriptModules, deleteProjectTestScript, uploadProjectTestScripts, exportProjectTestScriptsUrl } from '../api/projectTestScripts';
@@ -183,6 +184,7 @@ function OverviewTab({ project, allMembers, onAddMember, onRemoveMember, testScr
   );
 }
 
+
 // ── Test Scripts Tab ─────────────────────────────────────────
 function TestScriptsTab({ projectId }) {
   const [scripts, setScripts] = useState([]);
@@ -196,10 +198,8 @@ function TestScriptsTab({ projectId }) {
   const fetchScripts = async () => {
     try {
       setLoading(true);
-      const filters = {};
-      if (moduleFilter) filters.module = moduleFilter;
       const [s, m] = await Promise.all([
-        getProjectTestScripts(projectId, filters),
+        getProjectTestScripts(projectId),
         getProjectTestScriptModules(projectId),
       ]);
       setScripts(s);
@@ -212,7 +212,13 @@ function TestScriptsTab({ projectId }) {
     }
   };
 
-  useEffect(() => { fetchScripts(); }, [projectId, moduleFilter]);
+  useEffect(() => { fetchScripts(); }, [projectId]);
+
+  // Client-side fuzzy filter
+  const filteredScripts = useMemo(() => {
+    if (!moduleFilter.trim()) return scripts;
+    return scripts.filter((s) => s.module && fuzzyMatch(s.module, moduleFilter));
+  }, [scripts, moduleFilter]);
 
   const handleDelete = async (id) => {
     if (!window.confirm('Delete this test script?')) return;
@@ -245,14 +251,13 @@ function TestScriptsTab({ projectId }) {
     <div>
       {/* Actions bar */}
       <div className="flex flex-wrap items-center gap-3 mb-4">
-        <select
+        <FuzzyFilter
+          options={modules.map(m => ({ value: m, label: m }))}
           value={moduleFilter}
-          onChange={(e) => setModuleFilter(e.target.value)}
-          className="px-3 py-2.5 border border-gray-300 rounded-lg text-sm"
-        >
-          <option value="">All Modules</option>
-          {modules.map(m => <option key={m} value={m}>{m}</option>)}
-        </select>
+          onChange={setModuleFilter}
+          placeholder="Filter by module..."
+          liveFilter
+        />
 
         <div className="ml-auto flex gap-2">
           <a
@@ -299,8 +304,8 @@ function TestScriptsTab({ projectId }) {
       {/* Table */}
       {loading ? (
         <p className="text-gray-500">Loading...</p>
-      ) : scripts.length === 0 ? (
-        <p className="text-gray-500">No test scripts found.</p>
+      ) : filteredScripts.length === 0 ? (
+        <p className="text-gray-500">{moduleFilter ? 'No test scripts match this filter.' : 'No test scripts found.'}</p>
       ) : (
         <>
           <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
@@ -315,7 +320,7 @@ function TestScriptsTab({ projectId }) {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
-                {scripts.map((ts) => (
+                {filteredScripts.map((ts) => (
                   <tr key={ts.id} className="hover:bg-gray-50">
                     <td className="px-4 py-3">
                       <Link to={`/projects/${projectId}/test-scripts/${ts.id}`} className="text-sm text-blue-600 hover:text-blue-800 font-medium">
@@ -343,7 +348,7 @@ function TestScriptsTab({ projectId }) {
             </table>
           </div>
           <p className="mt-3 text-sm text-gray-500">
-            {scripts.length} test script{scripts.length !== 1 ? 's' : ''}
+            {filteredScripts.length}{moduleFilter ? ` of ${scripts.length}` : ''} test script{filteredScripts.length !== 1 ? 's' : ''}
           </p>
         </>
       )}
