@@ -1,4 +1,4 @@
-const BASE_URL = import.meta.env.VITE_API_URL || '';
+import { authFetch } from './base';
 
 // ── Web Crypto helpers ──────────────────────────────────────
 
@@ -17,7 +17,6 @@ async function encryptFile(fileBuffer) {
     fileBuffer
   );
 
-  // Export key as raw bytes
   const rawKey = await crypto.subtle.exportKey('raw', key);
 
   return {
@@ -47,12 +46,17 @@ function arrayBufferToBase64(buffer) {
   return btoa(binary);
 }
 
+function censorFileName(name) {
+  const dot = name.lastIndexOf('.');
+  const ext = dot !== -1 ? name.slice(dot) : '';
+  return `document_${Date.now()}${ext}`;
+}
+
 // ── API calls ───────────────────────────────────────────────
 
 async function initSession(fileName, fileType, totalParts, key, iv) {
-  const res = await fetch(`${BASE_URL}/api/generate/init`, {
+  const res = await authFetch('/api/generate/init', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ fileName, fileType, totalParts, key, iv }),
   });
   if (!res.ok) {
@@ -67,9 +71,8 @@ async function uploadPart(sessionId, partNumber, data, retries = 3) {
 
   for (let attempt = 0; attempt < retries; attempt++) {
     try {
-      const res = await fetch(`${BASE_URL}/api/generate/upload-part`, {
+      const res = await authFetch('/api/generate/upload-part', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ sessionId, partNumber, data: base64 }),
       });
       if (!res.ok) {
@@ -83,10 +86,9 @@ async function uploadPart(sessionId, partNumber, data, retries = 3) {
   }
 }
 
-async function processSession(sessionId) {
-  const res = await fetch(`${BASE_URL}/api/generate/process`, {
+async function startProcessing(sessionId) {
+  const res = await authFetch('/api/generate/process', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ sessionId }),
   });
   if (!res.ok) {
@@ -96,10 +98,35 @@ async function processSession(sessionId) {
   return res.json();
 }
 
+async function pollForResult(sessionId) {
+  const POLL_INTERVAL = 3000; // 3 seconds
+  const MAX_POLL_TIME = 600000; // 10 minutes
+  const start = Date.now();
+
+  while (Date.now() - start < MAX_POLL_TIME) {
+    const res = await authFetch(`/api/generate/status/${sessionId}`);
+    if (!res.ok) {
+      throw new Error('Failed to check generation status');
+    }
+    const data = await res.json();
+
+    if (data.status === 'done') {
+      return data;
+    }
+    if (data.status === 'error') {
+      throw new Error(data.error || 'AI generation failed');
+    }
+
+    // Still processing — wait and poll again
+    await new Promise(r => setTimeout(r, POLL_INTERVAL));
+  }
+
+  throw new Error('Generation timed out. Please try again.');
+}
+
 export async function batchImportScripts(projectId, scripts) {
-  const res = await fetch(`${BASE_URL}/api/projects/${projectId}/test-scripts/batch`, {
+  const res = await authFetch(`/api/projects/${projectId}/test-scripts/batch`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ scripts }),
   });
   if (!res.ok) {
@@ -111,31 +138,20 @@ export async function batchImportScripts(projectId, scripts) {
 
 // ── Main orchestrator ───────────────────────────────────────
 
-/**
- * Full flow: encrypt -> split -> upload -> process
- * @param {File} file
- * @param {Function} onProgress - called with { step, detail, percent }
- * @returns {Promise<Array>} generated scripts
- */
 export async function generateTestScripts(file, onProgress = () => {}) {
   const NUM_PARTS = 3;
 
-  // Step 1: Read file
   onProgress({ step: 'encrypt', detail: 'Reading file...', percent: 5 });
   const fileBuffer = await file.arrayBuffer();
 
-  // Step 2: Encrypt
   onProgress({ step: 'encrypt', detail: 'Encrypting file...', percent: 15 });
   const { ciphertext, key, iv } = await encryptFile(fileBuffer);
 
-  // Step 3: Split
   const chunks = splitIntoChunks(ciphertext, NUM_PARTS);
 
-  // Step 4: Init session
   onProgress({ step: 'init', detail: 'Starting secure session...', percent: 20 });
-  const { sessionId } = await initSession(file.name, file.type, NUM_PARTS, key, iv);
+  const { sessionId } = await initSession(censorFileName(file.name), file.type, NUM_PARTS, key, iv);
 
-  // Step 5: Upload parts
   for (let i = 0; i < NUM_PARTS; i++) {
     const partNum = i + 1;
     const percent = 20 + ((i + 1) / NUM_PARTS) * 40;
@@ -143,9 +159,11 @@ export async function generateTestScripts(file, onProgress = () => {}) {
     await uploadPart(sessionId, partNum, chunks[i]);
   }
 
-  // Step 6: Process
   onProgress({ step: 'generate', detail: 'Generating test scripts with AI...', percent: 70 });
-  const { scripts } = await processSession(sessionId);
+  await startProcessing(sessionId);
+
+  // Poll until the AI finishes
+  const { scripts } = await pollForResult(sessionId);
 
   onProgress({ step: 'done', detail: 'Done!', percent: 100 });
   return scripts;

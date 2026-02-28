@@ -1,15 +1,14 @@
-const BASE_URL = import.meta.env.VITE_API_URL || '';
+import { authFetch } from './base';
 
 export async function getMembers() {
-  const res = await fetch(`${BASE_URL}/api/members`);
+  const res = await authFetch('/api/members');
   if (!res.ok) throw new Error('Failed to fetch members');
   return res.json();
 }
 
 export async function createMember(data) {
-  const res = await fetch(`${BASE_URL}/api/members`, {
+  const res = await authFetch('/api/members', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data),
   });
   if (!res.ok) {
@@ -20,9 +19,8 @@ export async function createMember(data) {
 }
 
 export async function updateMember(id, data) {
-  const res = await fetch(`${BASE_URL}/api/members/${id}`, {
+  const res = await authFetch(`/api/members/${id}`, {
     method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data),
   });
   if (!res.ok) {
@@ -33,7 +31,7 @@ export async function updateMember(id, data) {
 }
 
 export async function deleteMember(id) {
-  const res = await fetch(`${BASE_URL}/api/members/${id}`, {
+  const res = await authFetch(`/api/members/${id}`, {
     method: 'DELETE',
   });
   if (!res.ok) {

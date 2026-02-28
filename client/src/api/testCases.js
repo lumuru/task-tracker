@@ -1,4 +1,4 @@
-const BASE_URL = import.meta.env.VITE_API_URL || '';
+import { authFetch } from './base';
 
 export async function getTestCases(filters = {}) {
   const params = new URLSearchParams();
@@ -9,27 +9,26 @@ export async function getTestCases(filters = {}) {
   if (filters.project_id) params.set('project_id', filters.project_id);
 
   const query = params.toString();
-  const res = await fetch(`${BASE_URL}/api/test-cases${query ? '?' + query : ''}`);
+  const res = await authFetch(`/api/test-cases${query ? '?' + query : ''}`);
   if (!res.ok) throw new Error('Failed to fetch test cases');
   return res.json();
 }
 
 export async function getTestCase(id) {
-  const res = await fetch(`${BASE_URL}/api/test-cases/${id}`);
+  const res = await authFetch(`/api/test-cases/${id}`);
   if (!res.ok) throw new Error('Failed to fetch test case');
   return res.json();
 }
 
 export async function getModules() {
-  const res = await fetch(`${BASE_URL}/api/test-cases/modules`);
+  const res = await authFetch('/api/test-cases/modules');
   if (!res.ok) throw new Error('Failed to fetch modules');
   return res.json();
 }
 
 export async function createTestCase(data) {
-  const res = await fetch(`${BASE_URL}/api/test-cases`, {
+  const res = await authFetch('/api/test-cases', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data),
   });
   if (!res.ok) {
@@ -40,9 +39,8 @@ export async function createTestCase(data) {
 }
 
 export async function updateTestCase(id, data) {
-  const res = await fetch(`${BASE_URL}/api/test-cases/${id}`, {
+  const res = await authFetch(`/api/test-cases/${id}`, {
     method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data),
   });
   if (!res.ok) {
@@ -56,7 +54,7 @@ export async function uploadTestCases(file) {
   const formData = new FormData();
   formData.append('file', file);
 
-  const res = await fetch(`${BASE_URL}/api/test-cases/upload`, {
+  const res = await authFetch('/api/test-cases/upload', {
     method: 'POST',
     body: formData,
   });
@@ -66,7 +64,7 @@ export async function uploadTestCases(file) {
 }
 
 export async function deleteTestCase(id) {
-  const res = await fetch(`${BASE_URL}/api/test-cases/${id}`, {
+  const res = await authFetch(`/api/test-cases/${id}`, {
     method: 'DELETE',
   });
   if (!res.ok) {

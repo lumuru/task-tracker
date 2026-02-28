@@ -1,21 +1,20 @@
-const BASE_URL = import.meta.env.VITE_API_URL || '';
+import { authFetch } from './base';
 
 export async function getTestRuns() {
-  const res = await fetch(`${BASE_URL}/api/test-runs`);
+  const res = await authFetch('/api/test-runs');
   if (!res.ok) throw new Error('Failed to fetch test runs');
   return res.json();
 }
 
 export async function getTestRun(id) {
-  const res = await fetch(`${BASE_URL}/api/test-runs/${id}`);
+  const res = await authFetch(`/api/test-runs/${id}`);
   if (!res.ok) throw new Error('Failed to fetch test run');
   return res.json();
 }
 
 export async function createTestRun(data) {
-  const res = await fetch(`${BASE_URL}/api/test-runs`, {
+  const res = await authFetch('/api/test-runs', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data),
   });
   if (!res.ok) {
@@ -26,9 +25,8 @@ export async function createTestRun(data) {
 }
 
 export async function updateTestRunResults(id, data) {
-  const res = await fetch(`${BASE_URL}/api/test-runs/${id}/results`, {
+  const res = await authFetch(`/api/test-runs/${id}/results`, {
     method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data),
   });
   if (!res.ok) {
@@ -39,7 +37,7 @@ export async function updateTestRunResults(id, data) {
 }
 
 export async function getTestRunSummary(id) {
-  const res = await fetch(`${BASE_URL}/api/test-runs/${id}/summary`);
+  const res = await authFetch(`/api/test-runs/${id}/summary`);
   if (!res.ok) throw new Error('Failed to fetch summary');
   return res.json();
 }

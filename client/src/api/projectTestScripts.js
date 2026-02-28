@@ -1,4 +1,4 @@
-const BASE_URL = import.meta.env.VITE_API_URL || '';
+import { authFetch } from './base';
 
 export async function getProjectTestScripts(projectId, filters = {}) {
   const params = new URLSearchParams();
@@ -8,7 +8,7 @@ export async function getProjectTestScripts(projectId, filters = {}) {
   if (filters.search) params.set('search', filters.search);
 
   const query = params.toString();
-  const res = await fetch(`${BASE_URL}/api/projects/${projectId}/test-scripts${query ? '?' + query : ''}`);
+  const res = await authFetch(`/api/projects/${projectId}/test-scripts${query ? '?' + query : ''}`);
   if (!res.ok) {
     const err = await res.json();
     throw new Error(err.error || 'Failed to fetch test scripts');
@@ -17,7 +17,7 @@ export async function getProjectTestScripts(projectId, filters = {}) {
 }
 
 export async function getProjectTestScript(projectId, id) {
-  const res = await fetch(`${BASE_URL}/api/projects/${projectId}/test-scripts/${id}`);
+  const res = await authFetch(`/api/projects/${projectId}/test-scripts/${id}`);
   if (!res.ok) {
     const err = await res.json();
     throw new Error(err.error || 'Failed to fetch test script');
@@ -26,15 +26,14 @@ export async function getProjectTestScript(projectId, id) {
 }
 
 export async function getProjectTestScriptModules(projectId) {
-  const res = await fetch(`${BASE_URL}/api/projects/${projectId}/test-scripts/modules`);
+  const res = await authFetch(`/api/projects/${projectId}/test-scripts/modules`);
   if (!res.ok) throw new Error('Failed to fetch modules');
   return res.json();
 }
 
 export async function createProjectTestScript(projectId, data) {
-  const res = await fetch(`${BASE_URL}/api/projects/${projectId}/test-scripts`, {
+  const res = await authFetch(`/api/projects/${projectId}/test-scripts`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data),
   });
   if (!res.ok) {
@@ -45,9 +44,8 @@ export async function createProjectTestScript(projectId, data) {
 }
 
 export async function updateProjectTestScript(projectId, id, data) {
-  const res = await fetch(`${BASE_URL}/api/projects/${projectId}/test-scripts/${id}`, {
+  const res = await authFetch(`/api/projects/${projectId}/test-scripts/${id}`, {
     method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data),
   });
   if (!res.ok) {
@@ -59,7 +57,7 @@ export async function updateProjectTestScript(projectId, id, data) {
 
 export async function deleteProjectTestScript(projectId, id, memberId) {
   const params = memberId ? `?member_id=${memberId}` : '';
-  const res = await fetch(`${BASE_URL}/api/projects/${projectId}/test-scripts/${id}${params}`, {
+  const res = await authFetch(`/api/projects/${projectId}/test-scripts/${id}${params}`, {
     method: 'DELETE',
   });
   if (!res.ok) {
@@ -69,6 +67,7 @@ export async function deleteProjectTestScript(projectId, id, memberId) {
 }
 
 export function exportProjectTestScriptsUrl(projectId) {
+  const BASE_URL = import.meta.env.VITE_API_URL || '';
   return `${BASE_URL}/api/projects/${projectId}/test-scripts/export`;
 }
 
@@ -77,7 +76,7 @@ export async function uploadProjectTestScripts(projectId, file, createdBy) {
   formData.append('file', file);
   if (createdBy) formData.append('created_by', createdBy);
 
-  const res = await fetch(`${BASE_URL}/api/projects/${projectId}/test-scripts/upload`, {
+  const res = await authFetch(`/api/projects/${projectId}/test-scripts/upload`, {
     method: 'POST',
     body: formData,
   });
