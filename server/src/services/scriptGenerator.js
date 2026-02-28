@@ -1,6 +1,10 @@
 const OpenAI = require('openai');
+const db = require('../db/database');
 
-const MODEL = process.env.AI_MODEL || 'gpt-4o';
+function getSetting(key, fallback) {
+  const row = db.prepare('SELECT value FROM app_settings WHERE key = ?').get(key);
+  return row ? row.value : fallback;
+}
 
 function getClient() {
   const apiKey = process.env.OPENROUTER_API_KEY;
@@ -66,10 +70,17 @@ async function generateScripts(text) {
 
   const client = getClient();
 
-  // Thinking models don't support response_format
-  const isThinkingModel = MODEL.includes('thinking') || MODEL.includes('think');
+  const model = getSetting('ai_model', process.env.AI_MODEL || 'gpt-4o');
+  const thinkingEnabled = getSetting('ai_thinking_enabled', 'false') === 'true';
+
+  // Determine provider from model name for OpenRouter routing
+  const provider = model.startsWith('anthropic/') ? 'anthropic'
+    : model.startsWith('openai/') ? 'openai'
+    : model.startsWith('google/') ? 'google'
+    : undefined;
+
   const requestParams = {
-    model: MODEL,
+    model,
     messages: [
       { role: 'system', content: SYSTEM_PROMPT },
       {
@@ -77,36 +88,71 @@ async function generateScripts(text) {
         content: `Requirements document:\n---\n${truncated}\n---\n\nGenerate test scripts from these requirements. Respond ONLY with the JSON object, no markdown fences or extra text.`,
       },
     ],
+    // Thinking models can't use response_format constraint
+    ...(!thinkingEnabled && { response_format: { type: 'json_object' } }),
+    ...(provider && { provider: { order: [provider], allow_fallbacks: false } }),
   };
-  if (!isThinkingModel) {
-    requestParams.response_format = { type: 'json_object' };
-  }
 
   const response = await client.chat.completions.create(requestParams);
 
-  const content = response.choices[0]?.message?.content;
-  if (!content) {
+  const message = response.choices[0]?.message;
+  // Thinking models may return content in `content` or the reasoning in a separate field
+  const content = message?.content || '';
+  const reasoning = message?.reasoning || message?.reasoning_content || '';
+
+  // Use content if it has JSON, otherwise check reasoning
+  const textToParse = content || reasoning;
+  if (!textToParse) {
+    console.error('AI response message:', JSON.stringify(message, null, 2).slice(0, 2000));
     throw new Error('No response from AI model');
   }
 
-  // Extract JSON from response — thinking models may wrap it in markdown fences
-  let jsonStr = content;
-  const fenceMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/);
+  // Extract JSON from response — thinking models may wrap it in markdown fences or extra text
+  let jsonStr = null;
+
+  // Strategy 1: Look for JSON inside markdown fences
+  const fenceMatch = textToParse.match(/```(?:json)?\s*([\s\S]*?)```/);
   if (fenceMatch) {
     jsonStr = fenceMatch[1].trim();
-  } else {
-    // Try to find the first { ... } block
-    const braceMatch = content.match(/\{[\s\S]*\}/);
-    if (braceMatch) {
-      jsonStr = braceMatch[0];
+  }
+
+  // Strategy 2: Find the outermost { ... } that contains "test_scripts" or "testScripts"
+  if (!jsonStr) {
+    const braceStart = textToParse.indexOf('{');
+    if (braceStart !== -1) {
+      // Find the matching closing brace by counting depth
+      let depth = 0;
+      let end = -1;
+      for (let i = braceStart; i < textToParse.length; i++) {
+        if (textToParse[i] === '{') depth++;
+        else if (textToParse[i] === '}') depth--;
+        if (depth === 0) { end = i; break; }
+      }
+      if (end !== -1) {
+        jsonStr = textToParse.slice(braceStart, end + 1);
+      }
     }
+  }
+
+  if (!jsonStr) {
+    console.error('Could not find JSON in AI response. First 1000 chars:', textToParse.slice(0, 1000));
+    throw new Error('Could not parse generated scripts');
   }
 
   let parsed;
   try {
     parsed = JSON.parse(jsonStr);
-  } catch (_) {
-    throw new Error('Could not parse generated scripts');
+  } catch (e) {
+    // Try cleaning common issues: trailing commas, control chars
+    try {
+      const cleaned = jsonStr
+        .replace(/,\s*([}\]])/g, '$1')     // trailing commas
+        .replace(/[\x00-\x1f\x7f]/g, ' '); // control characters
+      parsed = JSON.parse(cleaned);
+    } catch (_) {
+      console.error('JSON parse failed. First 1000 chars of extracted JSON:', jsonStr.slice(0, 1000));
+      throw new Error('Could not parse generated scripts');
+    }
   }
 
   const scripts = parsed.test_scripts || parsed.testScripts || [];
