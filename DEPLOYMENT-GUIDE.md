@@ -32,7 +32,68 @@
 
 ---
 
-## Prerequisites
+## Docker Deployment (Recommended)
+
+The simplest way to deploy is with Docker. A single container builds the React frontend and serves everything (API + UI) from one Express server.
+
+### Prerequisites
+
+- Docker and Docker Compose installed
+
+### Quick Start with Docker Compose
+
+```bash
+# Set environment variables (or create a .env file in the project root)
+export JWT_SECRET=your-secure-random-secret
+
+# Build and start
+docker compose up -d
+```
+
+Open http://localhost:3001 — the app serves both the frontend and API.
+
+### Using Docker Directly
+
+```bash
+# Build the image
+docker build -t qa-tracker .
+
+# Run the container
+docker run -d \
+  -p 3001:3001 \
+  -v ./server/data:/app/server/data \
+  -e JWT_SECRET=your-secure-random-secret \
+  qa-tracker
+```
+
+### Data Persistence
+
+SQLite database files live in `server/data/`. The Docker setup mounts this directory as a volume so data persists across container restarts and rebuilds.
+
+### Optional AI Provider Configuration
+
+To enable AI features, pass the relevant environment variables:
+
+```bash
+docker compose up -d \
+  -e AI_PROVIDER=anthropic \
+  -e ANTHROPIC_API_KEY=sk-ant-...
+```
+
+Or add them to a `.env` file in the project root.
+
+### Rebuilding After Updates
+
+```bash
+git pull
+docker compose up -d --build
+```
+
+---
+
+## Manual Deployment
+
+### Prerequisites
 
 - Node.js 18+ installed on your local device
 - A domain with hosting that supports static sites (e.g. Vercel, Netlify, Cloudflare Pages, or your own VPS with Nginx)

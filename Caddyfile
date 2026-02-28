@@ -1,0 +1,3 @@
+qa.romarmorales.com {
+	reverse_proxy qa-tracker:3001
+}
