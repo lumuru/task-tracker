@@ -66,6 +66,18 @@ export async function deleteProjectTestScript(projectId, id, memberId) {
   }
 }
 
+export async function bulkUpdateTestScriptStatus(projectId, ids, status) {
+  const res = await authFetch(`/api/projects/${projectId}/test-scripts/bulk-status`, {
+    method: 'PATCH',
+    body: JSON.stringify({ ids, status }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || 'Failed to update status');
+  }
+  return res.json();
+}
+
 export function exportProjectTestScriptsUrl(projectId) {
   const BASE_URL = import.meta.env.VITE_API_URL || '';
   return `${BASE_URL}/api/projects/${projectId}/test-scripts/export`;

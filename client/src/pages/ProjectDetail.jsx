@@ -3,7 +3,7 @@ import { useParams, Link, useNavigate } from 'react-router-dom';
 import FuzzyFilter, { fuzzyMatch } from '../components/FuzzyFilter';
 import { getProject, deleteProject, addProjectMembers, removeProjectMember, getProjectActivity } from '../api/projects';
 import { getMembers } from '../api/members';
-import { getProjectTestScripts, getProjectTestScriptModules, deleteProjectTestScript, uploadProjectTestScripts, exportProjectTestScriptsUrl } from '../api/projectTestScripts';
+import { getProjectTestScripts, getProjectTestScriptModules, deleteProjectTestScript, uploadProjectTestScripts, exportProjectTestScriptsUrl, bulkUpdateTestScriptStatus } from '../api/projectTestScripts';
 
 const statusColors = {
   active: 'bg-green-100 text-green-800',
@@ -194,6 +194,8 @@ function TestScriptsTab({ projectId }) {
   const [moduleFilter, setModuleFilter] = useState('');
   const [uploading, setUploading] = useState(false);
   const [uploadResult, setUploadResult] = useState(null);
+  const [selected, setSelected] = useState(new Set());
+  const [bulkUpdating, setBulkUpdating] = useState(false);
 
   const fetchScripts = async () => {
     try {
@@ -247,8 +249,67 @@ function TestScriptsTab({ projectId }) {
     }
   };
 
+  const toggleSelect = (id) => {
+    setSelected(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selected.size === filteredScripts.length) {
+      setSelected(new Set());
+    } else {
+      setSelected(new Set(filteredScripts.map(s => s.id)));
+    }
+  };
+
+  const handleBulkStatus = async (status) => {
+    if (selected.size === 0) return;
+    setBulkUpdating(true);
+    try {
+      await bulkUpdateTestScriptStatus(projectId, [...selected], status);
+      setSelected(new Set());
+      fetchScripts();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBulkUpdating(false);
+    }
+  };
+
   return (
     <div>
+      {/* Bulk action bar */}
+      {selected.size > 0 && (
+        <div className="mb-3 flex items-center gap-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+          <span className="text-sm font-medium text-blue-800">{selected.size} selected</span>
+          <span className="text-gray-300">|</span>
+          <span className="text-sm text-gray-600">Change status to:</span>
+          {['ready', 'draft', 'deprecated'].map(s => (
+            <button
+              key={s}
+              onClick={() => handleBulkStatus(s)}
+              disabled={bulkUpdating}
+              className={`px-3 py-1 text-xs font-medium rounded-md transition-colors disabled:opacity-50 ${
+                s === 'ready' ? 'bg-blue-600 text-white hover:bg-blue-700' :
+                s === 'draft' ? 'bg-gray-200 text-gray-700 hover:bg-gray-300' :
+                'bg-red-100 text-red-700 hover:bg-red-200'
+              }`}
+            >
+              {s.charAt(0).toUpperCase() + s.slice(1)}
+            </button>
+          ))}
+          <button
+            onClick={() => setSelected(new Set())}
+            className="ml-auto text-sm text-gray-500 hover:text-gray-700"
+          >
+            Clear
+          </button>
+        </div>
+      )}
+
       {/* Actions bar */}
       <div className="flex flex-wrap items-center gap-3 mb-4">
         <FuzzyFilter
@@ -312,6 +373,14 @@ function TestScriptsTab({ projectId }) {
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
+                  <th className="px-4 py-3 w-10">
+                    <input
+                      type="checkbox"
+                      checked={filteredScripts.length > 0 && selected.size === filteredScripts.length}
+                      onChange={toggleSelectAll}
+                      className="rounded border-gray-300 h-4 w-4"
+                    />
+                  </th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Title</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Module</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Priority</th>
@@ -321,7 +390,15 @@ function TestScriptsTab({ projectId }) {
               </thead>
               <tbody className="divide-y divide-gray-200">
                 {filteredScripts.map((ts) => (
-                  <tr key={ts.id} className="hover:bg-gray-50">
+                  <tr key={ts.id} className={`hover:bg-gray-50 ${selected.has(ts.id) ? 'bg-blue-50' : ''}`}>
+                    <td className="px-4 py-3 w-10">
+                      <input
+                        type="checkbox"
+                        checked={selected.has(ts.id)}
+                        onChange={() => toggleSelect(ts.id)}
+                        className="rounded border-gray-300 h-4 w-4"
+                      />
+                    </td>
                     <td className="px-4 py-3">
                       <Link to={`/projects/${projectId}/test-scripts/${ts.id}`} className="text-sm text-blue-600 hover:text-blue-800 font-medium">
                         {ts.title}

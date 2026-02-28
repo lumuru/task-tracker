@@ -224,6 +224,29 @@ router.put('/:id', (req, res) => {
   res.json(testScript);
 });
 
+// PATCH /api/projects/:projectId/test-scripts/bulk-status — bulk update status
+router.patch('/bulk-status', (req, res) => {
+  const { projectId } = req.params;
+  const { ids, status } = req.body;
+
+  if (!Array.isArray(ids) || ids.length === 0) {
+    return res.status(400).json({ error: 'ids array is required' });
+  }
+
+  const validStatuses = ['draft', 'ready', 'deprecated'];
+  if (!validStatuses.includes(status)) {
+    return res.status(400).json({ error: `status must be one of: ${validStatuses.join(', ')}` });
+  }
+
+  const placeholders = ids.map(() => '?').join(',');
+  const update = db.prepare(
+    `UPDATE test_cases SET status = ?, updated_at = datetime('now') WHERE id IN (${placeholders}) AND project_id = ?`
+  );
+  const result = update.run(status, ...ids, projectId);
+
+  res.json({ updated: result.changes });
+});
+
 // DELETE /api/projects/:projectId/test-scripts/:id — delete test script
 router.delete('/:id', (req, res) => {
   const { projectId, id } = req.params;
