@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { generateTestScripts, batchImportScripts } from '../api/generate';
 
@@ -10,6 +10,14 @@ const ACCEPTED_TYPES = [
 ];
 const ACCEPTED_EXTENSIONS = ['.pdf', '.docx', '.xlsx', '.xls'];
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+
+function censorFileName(name) {
+  const dot = name.lastIndexOf('.');
+  const ext = dot !== -1 ? name.slice(dot) : '';
+  const base = dot !== -1 ? name.slice(0, dot) : name;
+  if (base.length <= 4) return '****' + ext;
+  return base.slice(0, 3) + '*'.repeat(Math.min(base.length - 3, 20)) + ext;
+}
 
 const priorityColors = {
   critical: 'bg-red-100 text-red-800',
@@ -89,6 +97,36 @@ function ProcessingStep({ fileName, progress }) {
   ];
 
   const currentIndex = steps.findIndex((s) => s.key === progress.step);
+  const isGenerating = progress.step === 'generate';
+
+  // Elapsed timer during AI generation
+  const [elapsed, setElapsed] = useState(0);
+  const [animatedPercent, setAnimatedPercent] = useState(70);
+
+  useEffect(() => {
+    if (!isGenerating) {
+      setElapsed(0);
+      setAnimatedPercent(progress.percent || 0);
+      return;
+    }
+    setAnimatedPercent(70);
+    const start = Date.now();
+    const interval = setInterval(() => {
+      const secs = Math.floor((Date.now() - start) / 1000);
+      setElapsed(secs);
+      // Slowly creep progress from 70% toward 95% over ~5 minutes
+      setAnimatedPercent(70 + Math.min(25, (secs / 300) * 25));
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [isGenerating]);
+
+  const displayPercent = isGenerating ? animatedPercent : (progress.percent || 0);
+
+  const formatTime = (secs) => {
+    const m = Math.floor(secs / 60);
+    const s = secs % 60;
+    return m > 0 ? `${m}m ${s}s` : `${s}s`;
+  };
 
   return (
     <div className="max-w-lg mx-auto">
@@ -96,7 +134,7 @@ function ProcessingStep({ fileName, progress }) {
         <svg className="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m6.75 12H9m1.5-12H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
         </svg>
-        <span className="text-sm font-medium text-gray-700">{fileName}</span>
+        <span className="text-sm font-medium text-gray-700">{censorFileName(fileName)}</span>
       </div>
 
       <div className="space-y-3 mb-6">
@@ -122,6 +160,9 @@ function ProcessingStep({ fileName, progress }) {
               <span className={`text-sm ${isDone ? 'text-green-700' : isCurrent ? 'text-blue-700 font-medium' : 'text-gray-400'}`}>
                 {step.label}
               </span>
+              {isCurrent && step.key === 'generate' && elapsed > 0 && (
+                <span className="text-xs text-gray-400">{formatTime(elapsed)}</span>
+              )}
             </div>
           );
         })}
@@ -130,11 +171,16 @@ function ProcessingStep({ fileName, progress }) {
       {/* Progress bar */}
       <div className="w-full bg-gray-200 rounded-full h-2">
         <div
-          className="bg-blue-600 h-2 rounded-full transition-all duration-500"
-          style={{ width: `${progress.percent || 0}%` }}
+          className="bg-blue-600 h-2 rounded-full transition-all duration-1000"
+          style={{ width: `${displayPercent}%` }}
         />
       </div>
-      <p className="text-xs text-gray-400 mt-2 text-center">{Math.round(progress.percent || 0)}%</p>
+      <div className="flex items-center justify-between mt-2">
+        <p className="text-xs text-gray-400">{Math.round(displayPercent)}%</p>
+        {isGenerating && (
+          <p className="text-xs text-gray-400">This may take a few minutes with thinking models</p>
+        )}
+      </div>
     </div>
   );
 }

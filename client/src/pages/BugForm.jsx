@@ -3,6 +3,7 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { getBug, createBug, updateBug } from '../api/bugs';
 import { getMembers } from '../api/members';
 import { getTestCases } from '../api/testCases';
+import { getProjects } from '../api/projects';
 
 const SEVERITIES = ['critical', 'major', 'minor', 'trivial'];
 const PRIORITIES = ['P1', 'P2', 'P3', 'P4'];
@@ -16,6 +17,7 @@ export default function BugForm() {
   const isEditing = Boolean(id);
 
   const [members, setMembers] = useState([]);
+  const [projects, setProjects] = useState([]);
   const [testCases, setTestCases] = useState([]);
   const [loading, setLoading] = useState(isEditing);
   const [error, setError] = useState(null);
@@ -29,12 +31,14 @@ export default function BugForm() {
     module: '',
     assigned_to: '',
     reported_by: '',
+    project_id: '',
     test_case_id: searchParams.get('test_case_id') || '',
   });
 
   useEffect(() => {
-    Promise.all([getMembers(), getTestCases()]).then(([m, tc]) => {
+    Promise.all([getMembers(), getProjects(), getTestCases()]).then(([m, p, tc]) => {
       setMembers(m);
+      setProjects(p);
       setTestCases(tc);
     });
 
@@ -51,6 +55,7 @@ export default function BugForm() {
             module: bug.module || '',
             assigned_to: bug.assigned_to || '',
             reported_by: bug.reported_by || '',
+            project_id: bug.project_id || '',
             test_case_id: bug.test_case_id || '',
           });
           setLoading(false);
@@ -59,8 +64,18 @@ export default function BugForm() {
     }
   }, [id]);
 
+  // Filter test cases by selected project
+  const filteredTestCases = form.project_id
+    ? testCases.filter(tc => String(tc.project_id) === String(form.project_id))
+    : testCases;
+
   const handleChange = (e) => {
-    setForm({ ...form, [e.target.name]: e.target.value });
+    const { name, value } = e.target;
+    if (name === 'project_id') {
+      setForm({ ...form, project_id: value, test_case_id: '' });
+    } else {
+      setForm({ ...form, [name]: value });
+    }
   };
 
   const handleSubmit = async (e) => {
@@ -72,6 +87,7 @@ export default function BugForm() {
         ...form,
         assigned_to: form.assigned_to || null,
         reported_by: form.reported_by || null,
+        project_id: form.project_id || null,
         test_case_id: form.test_case_id || null,
       };
       if (isEditing) {
@@ -138,18 +154,29 @@ export default function BugForm() {
 
         <div className="grid grid-cols-2 gap-4">
           <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Project</label>
+            <select name="project_id" value={form.project_id} onChange={handleChange} className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm">
+              <option value="">— None —</option>
+              {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+          </div>
+          <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Module</label>
             <input type="text" name="module" value={form.module} onChange={handleChange}
               placeholder="e.g. Authentication, Checkout"
               className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
           </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Linked Test Case</label>
-            <select name="test_case_id" value={form.test_case_id} onChange={handleChange} className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm">
-              <option value="">— None —</option>
-              {testCases.map(tc => <option key={tc.id} value={tc.id}>{tc.title}</option>)}
-            </select>
-          </div>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Linked Test Case</label>
+          <select name="test_case_id" value={form.test_case_id} onChange={handleChange} className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm">
+            <option value="">— None —</option>
+            {filteredTestCases.map(tc => <option key={tc.id} value={tc.id}>{tc.title}</option>)}
+          </select>
+          {form.project_id && filteredTestCases.length === 0 && (
+            <p className="mt-1 text-xs text-gray-400">No test cases found for this project.</p>
+          )}
         </div>
 
         <div className="grid grid-cols-2 gap-4">

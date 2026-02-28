@@ -1,8 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-
-const BASE_URL = import.meta.env.VITE_API_URL || '';
+import { authFetch } from '../api/base';
 
 const statusColors = {
   active: 'bg-green-100 text-green-800',
@@ -63,9 +62,9 @@ export default function Dashboard() {
 
   useEffect(() => {
     Promise.all([
-      fetch(`${BASE_URL}/api/dashboard/stats`).then(r => r.json()),
-      fetch(`${BASE_URL}/api/dashboard/activity`).then(r => r.json()),
-      fetch(`${BASE_URL}/api/dashboard/project-summary`).then(r => r.json()),
+      authFetch('/api/dashboard/stats').then(r => r.json()),
+      authFetch('/api/dashboard/activity').then(r => r.json()),
+      authFetch('/api/dashboard/project-summary').then(r => r.json()),
     ])
       .then(([s, a, p]) => { setStats(s); setActivity(a); setProjectSummary(p); })
       .catch((err) => setError(err.message));

@@ -19,6 +19,16 @@ const statusColors = {
   deprecated: 'bg-red-50 text-red-600',
 };
 
+const execStatusConfig = {
+  pass: { icon: '✓', color: 'text-green-600 bg-green-50', label: 'Pass' },
+  fail: { icon: '✗', color: 'text-red-600 bg-red-50', label: 'Fail' },
+  blocked: { icon: '⊘', color: 'text-yellow-600 bg-yellow-50', label: 'Blocked' },
+  skipped: { icon: '—', color: 'text-gray-500 bg-gray-50', label: 'Skipped' },
+  pending: { icon: '○', color: 'text-gray-400 bg-gray-50', label: 'Pending' },
+};
+
+const capitalize = (s) => s ? s.charAt(0).toUpperCase() + s.slice(1) : '';
+
 export default function TestCases() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [testCases, setTestCases] = useState([]);
@@ -27,6 +37,8 @@ export default function TestCases() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [search, setSearch] = useState(searchParams.get('search') || '');
+  const [sortColumn, setSortColumn] = useState('title');
+  const [sortDirection, setSortDirection] = useState('asc');
 
   const filters = {
     module: searchParams.get('module') || '',
@@ -64,6 +76,57 @@ export default function TestCases() {
       })
     : testCases;
 
+  // Client-side sorting
+  const priorityOrder = { critical: 0, high: 1, medium: 2, low: 3 };
+
+  const sortedTestCases = [...filteredTestCases].sort((a, b) => {
+    let aVal, bVal;
+    switch (sortColumn) {
+      case 'title':
+        aVal = (a.title || '').toLowerCase();
+        bVal = (b.title || '').toLowerCase();
+        break;
+      case 'project':
+        aVal = (a.project_name || '').toLowerCase();
+        bVal = (b.project_name || '').toLowerCase();
+        break;
+      case 'module':
+        aVal = (a.module || '').toLowerCase();
+        bVal = (b.module || '').toLowerCase();
+        break;
+      case 'priority':
+        aVal = priorityOrder[a.priority] ?? 99;
+        bVal = priorityOrder[b.priority] ?? 99;
+        break;
+      case 'status':
+        aVal = (a.status || '').toLowerCase();
+        bVal = (b.status || '').toLowerCase();
+        break;
+      case 'last_result':
+        aVal = a.last_exec_status || '';
+        bVal = b.last_exec_status || '';
+        break;
+      case 'bugs':
+        aVal = a.bug_count || 0;
+        bVal = b.bug_count || 0;
+        break;
+      default:
+        return 0;
+    }
+    if (aVal < bVal) return sortDirection === 'asc' ? -1 : 1;
+    if (aVal > bVal) return sortDirection === 'asc' ? 1 : -1;
+    return 0;
+  });
+
+  const handleSort = (column) => {
+    if (sortColumn === column) {
+      setSortDirection(d => d === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortColumn(column);
+      setSortDirection('asc');
+    }
+  };
+
   useEffect(() => {
     fetchData();
   }, [searchParams.toString()]);
@@ -83,6 +146,26 @@ export default function TestCases() {
     updateFilter('search', search);
   };
 
+  // Stats
+  const statusCounts = filteredTestCases.reduce((acc, tc) => {
+    acc[tc.status] = (acc[tc.status] || 0) + 1;
+    return acc;
+  }, {});
+
+  const SortHeader = ({ column, children }) => (
+    <th
+      className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase cursor-pointer hover:text-gray-700 select-none"
+      onClick={() => handleSort(column)}
+    >
+      <span className="inline-flex items-center gap-1">
+        {children}
+        {sortColumn === column && (
+          <span className="text-blue-500">{sortDirection === 'asc' ? '↑' : '↓'}</span>
+        )}
+      </span>
+    </th>
+  );
+
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
@@ -94,6 +177,22 @@ export default function TestCases() {
 
       {error && (
         <div className="mb-4 p-3 bg-red-50 text-red-700 rounded-md text-sm">{error}</div>
+      )}
+
+      {/* Summary Stats Bar */}
+      {!loading && (
+        <div className="mb-4 flex flex-wrap gap-3 items-center">
+          <span className="text-sm font-medium text-gray-700">{filteredTestCases.length} total</span>
+          {STATUSES.map(s => {
+            const count = statusCounts[s] || 0;
+            if (count === 0) return null;
+            return (
+              <span key={s} className={`inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded ${statusColors[s]}`}>
+                {capitalize(s)}: {count}
+              </span>
+            );
+          })}
+        </div>
       )}
 
       {/* Filters */}
@@ -136,7 +235,7 @@ export default function TestCases() {
           className="px-3 py-2 border border-gray-300 rounded-md text-sm"
         >
           <option value="">All Priorities</option>
-          {PRIORITIES.map(p => <option key={p} value={p}>{p.charAt(0).toUpperCase() + p.slice(1)}</option>)}
+          {PRIORITIES.map(p => <option key={p} value={p}>{capitalize(p)}</option>)}
         </select>
 
         <select
@@ -145,7 +244,7 @@ export default function TestCases() {
           className="px-3 py-2 border border-gray-300 rounded-md text-sm"
         >
           <option value="">All Statuses</option>
-          {STATUSES.map(s => <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>)}
+          {STATUSES.map(s => <option key={s} value={s}>{capitalize(s)}</option>)}
         </select>
       </div>
 
@@ -155,56 +254,84 @@ export default function TestCases() {
       ) : filteredTestCases.length === 0 ? (
         <p className="text-gray-500">No test cases found. Create one to get started.</p>
       ) : (
-        <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Title</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Project</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Module</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Priority</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Created By</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-200">
-              {filteredTestCases.map((tc) => (
-                <tr key={tc.id} className="hover:bg-gray-50">
-                  <td className="px-4 py-3">
-                    {tc.project_id ? (
-                      <Link to={`/projects/${tc.project_id}/test-scripts/${tc.id}`} className="text-sm text-blue-600 hover:text-blue-800 font-medium">
-                        {tc.title}
-                      </Link>
-                    ) : (
-                      <span className="text-sm text-gray-800 font-medium">{tc.title}</span>
-                    )}
-                  </td>
-                  <td className="px-4 py-3">
-                    {tc.project_id ? (
-                      <Link to={`/projects/${tc.project_id}`} className="text-sm text-blue-600 hover:text-blue-800">
-                        {tc.project_name}
-                      </Link>
-                    ) : (
-                      <span className="text-sm text-gray-400">Unassigned</span>
-                    )}
-                  </td>
-                  <td className="px-4 py-3 text-sm text-gray-500">{tc.module || '\u2014'}</td>
-                  <td className="px-4 py-3">
-                    <span className={`inline-block px-2 py-0.5 text-xs font-medium rounded ${priorityColors[tc.priority] || ''}`}>
-                      {tc.priority}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3">
-                    <span className={`inline-block px-2 py-0.5 text-xs font-medium rounded ${statusColors[tc.status] || ''}`}>
-                      {tc.status}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 text-sm text-gray-500">{tc.created_by_name || '\u2014'}</td>
+        <>
+          <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <SortHeader column="title">Title</SortHeader>
+                  <SortHeader column="project">Project</SortHeader>
+                  <SortHeader column="module">Module</SortHeader>
+                  <SortHeader column="priority">Priority</SortHeader>
+                  <SortHeader column="status">Status</SortHeader>
+                  <SortHeader column="last_result">Last Result</SortHeader>
+                  <SortHeader column="bugs">Bugs</SortHeader>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Created By</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody className="divide-y divide-gray-200">
+                {sortedTestCases.map((tc) => {
+                  const execCfg = tc.last_exec_status ? execStatusConfig[tc.last_exec_status] : null;
+                  return (
+                    <tr key={tc.id} className="hover:bg-gray-50">
+                      <td className="px-4 py-3">
+                        {tc.project_id ? (
+                          <Link to={`/projects/${tc.project_id}/test-scripts/${tc.id}`} className="text-sm text-blue-600 hover:text-blue-800 font-medium">
+                            {tc.title}
+                          </Link>
+                        ) : (
+                          <span className="text-sm text-gray-800 font-medium">{tc.title}</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3">
+                        {tc.project_id ? (
+                          <Link to={`/projects/${tc.project_id}`} className="text-sm text-blue-600 hover:text-blue-800">
+                            {tc.project_name}
+                          </Link>
+                        ) : (
+                          <span className="text-sm text-gray-400">Unassigned</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-gray-500">{tc.module || '—'}</td>
+                      <td className="px-4 py-3">
+                        <span className={`inline-block px-2 py-0.5 text-xs font-medium rounded ${priorityColors[tc.priority] || ''}`}>
+                          {capitalize(tc.priority)}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className={`inline-block px-2 py-0.5 text-xs font-medium rounded ${statusColors[tc.status] || ''}`}>
+                          {capitalize(tc.status)}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        {execCfg ? (
+                          <span className={`inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded ${execCfg.color}`}>
+                            {execCfg.icon} {execCfg.label}
+                          </span>
+                        ) : (
+                          <span className="text-sm text-gray-400">—</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3">
+                        {tc.bug_count > 0 ? (
+                          <Link to={`/bugs?test_case_id=${tc.id}`} className="inline-block px-2 py-0.5 text-xs font-medium rounded bg-orange-100 text-orange-800 hover:bg-orange-200">
+                            {tc.bug_count}
+                          </Link>
+                        ) : (
+                          <span className="text-sm text-gray-400">—</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-gray-500">{tc.created_by_name || '—'}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          <p className="mt-2 text-xs text-gray-500">
+            Showing {sortedTestCases.length} of {testCases.length} test cases
+          </p>
+        </>
       )}
     </div>
   );

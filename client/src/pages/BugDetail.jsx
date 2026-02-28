@@ -141,6 +141,13 @@ export default function BugDetail() {
           </div>
         )}
 
+        {bug.project_name && (
+          <div>
+            <h3 className="text-sm font-medium text-gray-500 mb-1">Project</h3>
+            <p className="text-sm text-gray-800">{bug.project_name}</p>
+          </div>
+        )}
+
         {bug.test_case_title && (
           <div>
             <h3 className="text-sm font-medium text-gray-500 mb-1">Linked Test Case</h3>

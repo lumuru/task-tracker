@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { getProjectTestScript, deleteProjectTestScript } from '../api/projectTestScripts';
+import { authFetch } from '../api/base';
 
 const priorityColors = {
   critical: 'bg-red-100 text-red-800',
@@ -102,19 +103,17 @@ export default function ProjectTestScriptDetail() {
   const [executions, setExecutions] = useState([]);
   const [error, setError] = useState(null);
 
-  const BASE = import.meta.env.VITE_API_URL || '';
-
   useEffect(() => {
     getProjectTestScript(projectId, id)
       .then(setTs)
       .catch((err) => setError(err.message));
 
-    fetch(`${BASE}/api/bugs?test_case_id=${id}`)
+    authFetch(`/api/bugs?test_case_id=${id}`)
       .then(r => r.json())
       .then(setLinkedBugs)
       .catch(() => {});
 
-    fetch(`${BASE}/api/test-cases/${id}/executions`)
+    authFetch(`/api/test-cases/${id}/executions`)
       .then(r => r.json())
       .then(setExecutions)
       .catch(() => {});
