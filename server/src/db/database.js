@@ -115,4 +115,71 @@ if (!runHasProjectId) {
   db.exec("ALTER TABLE test_runs ADD COLUMN project_id INTEGER REFERENCES projects(id)");
 }
 
+// Migration: add auth columns to team_members
+const memberCols = db.prepare("PRAGMA table_info(team_members)").all();
+const colNames = memberCols.map(c => c.name);
+
+if (!colNames.includes('email')) {
+  db.exec("ALTER TABLE team_members ADD COLUMN email TEXT");
+  db.exec("ALTER TABLE team_members ADD COLUMN password_hash TEXT");
+  db.exec("ALTER TABLE team_members ADD COLUMN is_active INTEGER DEFAULT 1");
+  db.exec("ALTER TABLE team_members ADD COLUMN last_login TEXT");
+  db.exec("ALTER TABLE team_members ADD COLUMN must_change_password INTEGER DEFAULT 0");
+
+  // Backfill existing members with email from name
+  const bcrypt = require('bcryptjs');
+  const tempHash = bcrypt.hashSync('changeme123', 10);
+  const existing = db.prepare('SELECT id, name FROM team_members').all();
+  const updateStmt = db.prepare('UPDATE team_members SET email = ?, password_hash = ?, role = ?, must_change_password = 1 WHERE id = ?');
+
+  existing.forEach((m, i) => {
+    const slug = m.name.toLowerCase().replace(/[^a-z0-9]+/g, '.').replace(/^\.+|\.+$/g, '');
+    const email = `${slug}@local`;
+    const role = i === 0 ? 'admin' : 'member';
+    updateStmt.run(email, tempHash, role, m.id);
+  });
+
+  // Create unique index on email (after backfill to avoid null conflicts)
+  db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_team_members_email ON team_members(email)");
+}
+
+// Migration: add project_id column to bugs if it doesn't exist
+const bugCols = db.prepare("PRAGMA table_info(bugs)").all();
+if (!bugCols.some(c => c.name === 'project_id')) {
+  db.exec("ALTER TABLE bugs ADD COLUMN project_id INTEGER REFERENCES projects(id)");
+  // Backfill from linked test case's project
+  db.exec(`
+    UPDATE bugs SET project_id = (
+      SELECT tc.project_id FROM test_cases tc WHERE tc.id = bugs.test_case_id
+    ) WHERE project_id IS NULL AND test_case_id IS NOT NULL
+  `);
+}
+
+// Create app_settings table for in-app configuration
+db.exec(`
+  CREATE TABLE IF NOT EXISTS app_settings (
+    key TEXT PRIMARY KEY,
+    value TEXT,
+    updated_at TEXT DEFAULT (datetime('now'))
+  )
+`);
+
+// Seed default settings from env vars if not already present
+const seedSetting = db.prepare(
+  'INSERT OR IGNORE INTO app_settings (key, value, updated_at) VALUES (?, ?, datetime(\'now\'))'
+);
+seedSetting.run('ai_model', process.env.AI_MODEL || 'gpt-4o');
+seedSetting.run('ai_thinking_enabled', process.env.AI_THINKING_ENABLED || 'false');
+
+// Seed default admin if no members exist
+const memberCount = db.prepare('SELECT COUNT(*) as count FROM team_members').get().count;
+if (memberCount === 0) {
+  const bcrypt = require('bcryptjs');
+  const hash = bcrypt.hashSync('admin123', 10);
+  db.prepare(
+    'INSERT INTO team_members (name, role, email, password_hash, is_active, must_change_password) VALUES (?, ?, ?, ?, 1, 1)'
+  ).run('Admin', 'admin', 'admin@local', hash);
+  db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_team_members_email ON team_members(email)");
+}
+
 module.exports = db;

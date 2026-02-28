@@ -1,5 +1,13 @@
 const express = require('express');
 const cors = require('cors');
+const path = require('path');
+const fs = require('fs');
+
+// Load .env if present
+try { require('dotenv').config({ path: path.join(__dirname, '../.env') }); } catch (_) {}
+
+const { requireAuth, requireAdmin } = require('./middleware/auth');
+const authRouter = require('./routes/auth');
 const membersRouter = require('./routes/members');
 const testCasesRouter = require('./routes/testCases');
 const testRunsRouter = require('./routes/testRuns');
@@ -8,25 +16,38 @@ const projectsRouter = require('./routes/projects');
 const dashboardRouter = require('./routes/dashboard');
 const projectTestScriptsRouter = require('./routes/projectTestScripts');
 const generateRouter = require('./routes/generate');
-
-// Load .env if present
-try { require('dotenv').config({ path: require('path').join(__dirname, '../.env') }); } catch (_) {}
+const settingsRouter = require('./routes/settings');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-app.use(cors());
+app.use(cors({
+  origin: process.env.CORS_ORIGIN || '*',
+}));
 app.use(express.json({ limit: '50mb' }));
 
-// Routes
-app.use('/api/members', membersRouter);
-app.use('/api/test-cases', testCasesRouter);
-app.use('/api/test-runs', testRunsRouter);
-app.use('/api/bugs', bugsRouter);
-app.use('/api/projects', projectsRouter);
-app.use('/api/projects/:projectId/test-scripts', projectTestScriptsRouter);
-app.use('/api/dashboard', dashboardRouter);
-app.use('/api/generate', generateRouter);
+// Public routes (no auth required)
+app.use('/api/auth', authRouter);
+
+// Protected routes (require valid JWT)
+app.use('/api/members', requireAuth, membersRouter);
+app.use('/api/test-cases', requireAuth, testCasesRouter);
+app.use('/api/test-runs', requireAuth, testRunsRouter);
+app.use('/api/bugs', requireAuth, bugsRouter);
+app.use('/api/projects', requireAuth, projectsRouter);
+app.use('/api/projects/:projectId/test-scripts', requireAuth, projectTestScriptsRouter);
+app.use('/api/dashboard', requireAuth, dashboardRouter);
+app.use('/api/generate', requireAuth, generateRouter);
+app.use('/api/settings', requireAuth, settingsRouter);
+
+// Serve built React frontend in production
+const clientDistPath = path.join(__dirname, '../../client/dist');
+if (fs.existsSync(clientDistPath)) {
+  app.use(express.static(clientDistPath));
+  app.get('*', (req, res) => {
+    res.sendFile(path.join(clientDistPath, 'index.html'));
+  });
+}
 
 app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
