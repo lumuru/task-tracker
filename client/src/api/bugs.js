@@ -9,6 +9,7 @@ export async function getBugs(filters = {}) {
   if (filters.module) params.set('module', filters.module);
   if (filters.search) params.set('search', filters.search);
   if (filters.test_case_id) params.set('test_case_id', filters.test_case_id);
+  if (filters.project_id) params.set('project_id', filters.project_id);
 
   const query = params.toString();
   const res = await authFetch(`/api/bugs${query ? '?' + query : ''}`);

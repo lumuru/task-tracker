@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { getBugs, getBugModules, deleteBug } from '../api/bugs';
 import { getMembers } from '../api/members';
+import { getProjects } from '../api/projects';
 import FuzzyFilter from '../components/FuzzyFilter';
 
 const SEVERITIES = ['critical', 'major', 'minor', 'trivial'];
@@ -45,6 +46,7 @@ export default function Bugs() {
   const [bugs, setBugs] = useState([]);
   const [modules, setModules] = useState([]);
   const [members, setMembers] = useState([]);
+  const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [search, setSearch] = useState(searchParams.get('search') || '');
@@ -55,6 +57,7 @@ export default function Bugs() {
     priority: searchParams.get('priority') || '',
     assigned_to: searchParams.get('assigned_to') || '',
     module: searchParams.get('module') || '',
+    project_id: searchParams.get('project_id') || '',
     search: searchParams.get('search') || '',
   };
 
@@ -63,14 +66,16 @@ export default function Bugs() {
       setLoading(true);
       const activeFilters = {};
       Object.entries(filters).forEach(([k, v]) => { if (v) activeFilters[k] = v; });
-      const [bugsData, modsData, memsData] = await Promise.all([
+      const [bugsData, modsData, memsData, projsData] = await Promise.all([
         getBugs(activeFilters),
         getBugModules(),
         getMembers(),
+        getProjects(),
       ]);
       setBugs(bugsData);
       setModules(modsData);
       setMembers(memsData);
+      setProjects(projsData);
       setError(null);
     } catch (err) {
       setError(err.message);
@@ -127,6 +132,13 @@ export default function Bugs() {
         </form>
 
         <FuzzyFilter
+          options={projects.map(p => ({ value: String(p.id), label: p.name }))}
+          value={filters.project_id}
+          onChange={(v) => updateFilter('project_id', v)}
+          placeholder="All Projects"
+        />
+
+        <FuzzyFilter
           options={STATUSES.map(s => ({ value: s, label: statusLabels[s] }))}
           value={filters.status}
           onChange={(v) => updateFilter('status', v)}
@@ -173,6 +185,7 @@ export default function Bugs() {
             <thead className="bg-gray-50">
               <tr>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Title</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Project</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Severity</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Priority</th>
@@ -186,6 +199,13 @@ export default function Bugs() {
                 <tr key={bug.id} className="hover:bg-gray-50">
                   <td className="px-4 py-3">
                     <Link to={`/bugs/${bug.id}`} className="text-sm text-blue-600 hover:text-blue-800 font-medium">{bug.title}</Link>
+                  </td>
+                  <td className="px-4 py-3 text-sm">
+                    {bug.project_id ? (
+                      <Link to={`/projects/${bug.project_id}`} className="text-blue-600 hover:text-blue-800">{bug.project_name}</Link>
+                    ) : (
+                      <span className="text-gray-400">&mdash;</span>
+                    )}
                   </td>
                   <td className="px-4 py-3">
                     <span className={`inline-block px-2 py-0.5 text-xs font-medium rounded ${statusColors[bug.status] || ''}`}>

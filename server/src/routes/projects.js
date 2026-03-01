@@ -49,7 +49,7 @@ router.get('/:id', (req, res) => {
   // Open defects for this project
   const openDefects = db.prepare(`
     SELECT COUNT(*) as count FROM bugs
-    WHERE test_case_id IN (SELECT tc.id FROM test_cases tc WHERE tc.project_id = ?)
+    WHERE project_id = ?
       AND status NOT IN ('verified', 'closed')
   `).get(id).count;
 
@@ -233,7 +233,7 @@ router.get('/:id/activity', (req, res) => {
            reporter.name as reported_by_name
     FROM bugs b
     LEFT JOIN team_members reporter ON b.reported_by = reporter.id
-    WHERE b.test_case_id IN (SELECT tc.id FROM test_cases tc WHERE tc.project_id = ?)
+    WHERE b.project_id = ?
     ORDER BY b.created_at DESC
     LIMIT 10
   `).all(id);

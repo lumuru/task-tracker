@@ -4,6 +4,7 @@ import FuzzyFilter, { fuzzyMatch } from '../components/FuzzyFilter';
 import { getProject, deleteProject, addProjectMembers, removeProjectMember, getProjectActivity } from '../api/projects';
 import { getMembers } from '../api/members';
 import { getProjectTestScripts, getProjectTestScriptModules, deleteProjectTestScript, uploadProjectTestScripts, exportProjectTestScriptsUrl, bulkUpdateTestScriptStatus } from '../api/projectTestScripts';
+import { getBugs, deleteBug } from '../api/bugs';
 
 const statusColors = {
   active: 'bg-green-100 text-green-800',
@@ -433,6 +434,123 @@ function TestScriptsTab({ projectId }) {
   );
 }
 
+// ── Bugs Tab ─────────────────────────────────────────────────
+const bugStatusColors = {
+  new: 'bg-blue-100 text-blue-800',
+  open: 'bg-yellow-100 text-yellow-800',
+  in_progress: 'bg-purple-100 text-purple-800',
+  fixed: 'bg-green-100 text-green-800',
+  verified: 'bg-teal-100 text-teal-800',
+  closed: 'bg-gray-100 text-gray-600',
+};
+
+const bugStatusLabels = {
+  new: 'New', open: 'Open', in_progress: 'In Progress',
+  fixed: 'Fixed', verified: 'Verified', closed: 'Closed',
+};
+
+function BugsTab({ projectId }) {
+  const [bugs, setBugs] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  const fetchBugs = async () => {
+    try {
+      setLoading(true);
+      const data = await getBugs({ project_id: projectId });
+      setBugs(data);
+      setError(null);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { fetchBugs(); }, [projectId]);
+
+  const handleDelete = async (id) => {
+    if (!window.confirm('Delete this bug?')) return;
+    try {
+      await deleteBug(id);
+      fetchBugs();
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-4">
+        <div />
+        <Link
+          to={`/bugs/new?project_id=${projectId}`}
+          className="px-4 py-2.5 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
+        >
+          Report Bug
+        </Link>
+      </div>
+
+      {error && <div className="mb-4 p-3 bg-red-50 text-red-700 rounded-lg text-sm">{error}</div>}
+
+      {loading ? (
+        <p className="text-gray-500">Loading...</p>
+      ) : bugs.length === 0 ? (
+        <p className="text-gray-500">No bugs found for this project.</p>
+      ) : (
+        <>
+          <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Title</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Severity</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Priority</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Assigned To</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Module</th>
+                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-200">
+                {bugs.map((bug) => (
+                  <tr key={bug.id} className="hover:bg-gray-50">
+                    <td className="px-4 py-3">
+                      <Link to={`/bugs/${bug.id}`} className="text-sm text-blue-600 hover:text-blue-800 font-medium">{bug.title}</Link>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className={`inline-block px-2 py-0.5 text-xs font-medium rounded ${bugStatusColors[bug.status] || ''}`}>
+                        {bugStatusLabels[bug.status] || bug.status}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className={`inline-block px-2 py-0.5 text-xs font-medium rounded ${severityColors[bug.severity] || ''}`}>
+                        {bug.severity}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className={`inline-block px-2 py-0.5 text-xs font-medium rounded ${priorityColors[bug.priority] || ''}`}>
+                        {bug.priority}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-sm text-gray-500">{bug.assigned_to_name || '\u2014'}</td>
+                    <td className="px-4 py-3 text-sm text-gray-500">{bug.module || '\u2014'}</td>
+                    <td className="px-4 py-3 text-right space-x-3">
+                      <Link to={`/bugs/${bug.id}/edit`} className="text-sm text-blue-600 hover:text-blue-800">Edit</Link>
+                      <button onClick={() => handleDelete(bug.id)} className="text-sm text-red-600 hover:text-red-800">Delete</button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p className="mt-3 text-sm text-gray-500">{bugs.length} bug{bugs.length !== 1 ? 's' : ''}</p>
+        </>
+      )}
+    </div>
+  );
+}
+
 // ── Activity Tab ─────────────────────────────────────────────
 function ActivityTab({ projectId }) {
   const [activity, setActivity] = useState(null);
@@ -518,19 +636,22 @@ export default function ProjectDetail() {
   const [project, setProject] = useState(null);
   const [allMembers, setAllMembers] = useState([]);
   const [testScriptCount, setTestScriptCount] = useState(0);
+  const [bugCount, setBugCount] = useState(0);
   const [activeTab, setActiveTab] = useState('overview');
   const [error, setError] = useState(null);
 
   const fetchData = async () => {
     try {
-      const [projectData, membersData, scriptsData] = await Promise.all([
+      const [projectData, membersData, scriptsData, bugsData] = await Promise.all([
         getProject(id),
         getMembers(),
         getProjectTestScripts(id),
+        getBugs({ project_id: id }),
       ]);
       setProject(projectData);
       setAllMembers(membersData);
       setTestScriptCount(scriptsData.length);
+      setBugCount(bugsData.length);
       setError(null);
     } catch (err) {
       setError(err.message);
@@ -574,6 +695,7 @@ export default function ProjectDetail() {
   const tabs = [
     { key: 'overview', label: 'Overview' },
     { key: 'test-scripts', label: `Test Scripts (${testScriptCount})` },
+    { key: 'bugs', label: `Bugs (${bugCount})` },
     { key: 'activity', label: 'Activity' },
   ];
 
@@ -644,6 +766,9 @@ export default function ProjectDetail() {
       )}
       {activeTab === 'test-scripts' && (
         <TestScriptsTab projectId={id} />
+      )}
+      {activeTab === 'bugs' && (
+        <BugsTab projectId={id} />
       )}
       {activeTab === 'activity' && (
         <ActivityTab projectId={id} />

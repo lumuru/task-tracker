@@ -137,7 +137,7 @@ router.get('/project-summary', (req, res) => {
     // Open defects linked to this project's test cases
     const openDefects = db.prepare(`
       SELECT COUNT(*) as count FROM bugs
-      WHERE test_case_id IN (SELECT id FROM test_cases WHERE project_id = ?)
+      WHERE project_id = ?
         AND status NOT IN ('verified', 'closed')
     `).get(p.id).count;
 

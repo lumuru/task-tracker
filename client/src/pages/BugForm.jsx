@@ -31,7 +31,7 @@ export default function BugForm() {
     module: '',
     assigned_to: '',
     reported_by: '',
-    project_id: '',
+    project_id: searchParams.get('project_id') || '',
     test_case_id: searchParams.get('test_case_id') || '',
   });
 
