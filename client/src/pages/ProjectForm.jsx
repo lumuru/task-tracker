@@ -5,6 +5,8 @@ import { getMembers } from '../api/members';
 
 const STATUSES = ['active', 'archived'];
 const STATUS_LABELS = { active: 'Active', archived: 'Archived' };
+const PRIORITIES = ['critical', 'high', 'medium', 'low'];
+const PRIORITY_LABELS = { critical: 'Critical', high: 'High', medium: 'Medium', low: 'Low' };
 
 export default function ProjectForm() {
   const { id } = useParams();
@@ -18,6 +20,7 @@ export default function ProjectForm() {
     name: '',
     description: '',
     status: 'active',
+    priority: 'medium',
     created_by: '',
   });
   const [createdByName, setCreatedByName] = useState('');
@@ -35,6 +38,7 @@ export default function ProjectForm() {
             name: project.name || '',
             description: project.description || '',
             status: project.status || 'active',
+            priority: project.priority || 'medium',
             created_by: project.created_by || '',
           });
           setCreatedByName(project.created_by_name || '');
@@ -74,6 +78,7 @@ export default function ProjectForm() {
           name: form.name,
           description: form.description,
           status: form.status,
+          priority: form.priority,
         });
 
         const toAdd = selectedMemberIds.filter((mid) => !existingMemberIds.includes(mid));
@@ -145,8 +150,8 @@ export default function ProjectForm() {
           />
         </div>
 
-        {/* Status + Created By */}
-        <div className="grid grid-cols-2 gap-4">
+        {/* Status + Priority + Created By */}
+        <div className="grid grid-cols-3 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
             <select
@@ -156,6 +161,17 @@ export default function ProjectForm() {
               className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm"
             >
               {STATUSES.map((s) => <option key={s} value={s}>{STATUS_LABELS[s]}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Priority</label>
+            <select
+              name="priority"
+              value={form.priority}
+              onChange={handleChange}
+              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm"
+            >
+              {PRIORITIES.map((p) => <option key={p} value={p}>{PRIORITY_LABELS[p]}</option>)}
             </select>
           </div>
           {isEditing ? (

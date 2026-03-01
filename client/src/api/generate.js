@@ -132,8 +132,14 @@ export async function batchImportScripts(projectId, scripts, source = 'ai_genera
     body: JSON.stringify(body),
   });
   if (!res.ok) {
-    const err = await res.json();
-    throw new Error(err.error || 'Failed to import scripts');
+    let message = 'Failed to import scripts';
+    try {
+      const err = await res.json();
+      message = err.error || message;
+    } catch (_) {
+      message = `Server error (${res.status})`;
+    }
+    throw new Error(message);
   }
   return res.json();
 }
@@ -143,8 +149,14 @@ export async function deleteAiGeneratedScripts(projectId) {
     method: 'DELETE',
   });
   if (!res.ok) {
-    const err = await res.json();
-    throw new Error(err.error || 'Failed to delete AI-generated scripts');
+    let message = 'Failed to delete AI-generated scripts';
+    try {
+      const err = await res.json();
+      message = err.error || message;
+    } catch (_) {
+      message = `Server error (${res.status})`;
+    }
+    throw new Error(message);
   }
   return res.json();
 }

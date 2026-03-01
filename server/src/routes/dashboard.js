@@ -193,25 +193,51 @@ router.get('/activity', (req, res) => {
     LIMIT 10
   `).all();
 
-  const recentResults = db.prepare(`
-    SELECT r.status, r.executed_at, r.notes,
-           tc.id as test_case_id, tc.title as test_case_title,
-           tc.project_id,
-           tr.id as test_run_id, tr.name as test_run_name,
-           tm.name as executed_by_name
-    FROM test_results r
-    JOIN test_cases tc ON r.test_case_id = tc.id
-    JOIN test_runs tr ON r.test_run_id = tr.id
-    LEFT JOIN team_members tm ON r.executed_by = tm.id
-    WHERE r.status != 'pending'
-    ORDER BY r.executed_at DESC
+  const recentRuns = db.prepare(`
+    SELECT tr.id, tr.name, tr.date, tr.environment, tr.created_at,
+           p.name as project_name,
+           tm.name as created_by_name,
+           (SELECT COUNT(*) FROM test_results WHERE test_run_id = tr.id) as total,
+           (SELECT COUNT(*) FROM test_results WHERE test_run_id = tr.id AND status = 'pass') as passed,
+           (SELECT COUNT(*) FROM test_results WHERE test_run_id = tr.id AND status = 'fail') as failed,
+           (SELECT COUNT(*) FROM test_results WHERE test_run_id = tr.id AND status = 'blocked') as blocked
+    FROM test_runs tr
+    LEFT JOIN projects p ON tr.project_id = p.id
+    LEFT JOIN team_members tm ON tr.created_by = tm.id
+    ORDER BY tr.created_at DESC
     LIMIT 10
   `).all();
 
   res.json({
     recent_bugs: recentBugs,
-    recent_results: recentResults,
+    recent_runs: recentRuns,
   });
+});
+
+// GET /api/dashboard/team-assignments — members with their assigned projects
+router.get('/team-assignments', (req, res) => {
+  const members = db.prepare(`
+    SELECT tm.id, tm.name, tm.role,
+      (SELECT COUNT(*) FROM project_members pm WHERE pm.member_id = tm.id) as project_count
+    FROM team_members tm
+    WHERE tm.is_active = 1
+    ORDER BY tm.name
+  `).all();
+
+  const assignments = db.prepare(`
+    SELECT pm.member_id, p.id as project_id, p.name as project_name, p.status as project_status
+    FROM project_members pm
+    JOIN projects p ON pm.project_id = p.id
+    ORDER BY p.name
+  `).all();
+
+  const assignmentMap = {};
+  for (const a of assignments) {
+    if (!assignmentMap[a.member_id]) assignmentMap[a.member_id] = [];
+    assignmentMap[a.member_id].push({ id: a.project_id, name: a.project_name, status: a.project_status });
+  }
+
+  res.json(members.map(m => ({ ...m, projects: assignmentMap[m.id] || [] })));
 });
 
 module.exports = router;

@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { authFetch } from '../api/base';
 
 const statusColors = {
@@ -8,31 +7,12 @@ const statusColors = {
   archived: 'bg-gray-100 text-gray-600',
 };
 
-const pieColors = {
-  draft: '#9CA3AF',
-  ready: '#3B82F6',
-  deprecated: '#EF4444',
-};
-
-const barColors = {
-  critical: '#EF4444',
-  high: '#F97316',
-  medium: '#EAB308',
-  low: '#22C55E',
-};
 
 const severityColors = {
   critical: 'bg-red-500',
   major: 'bg-orange-500',
   minor: 'bg-yellow-500',
   trivial: 'bg-gray-400',
-};
-
-const resultColors = {
-  pass: 'text-green-700 bg-green-50',
-  fail: 'text-red-700 bg-red-50',
-  blocked: 'text-yellow-700 bg-yellow-50',
-  skipped: 'text-gray-600 bg-gray-50',
 };
 
 function passRateColor(rate) {
@@ -42,22 +22,12 @@ function passRateColor(rate) {
   return 'text-red-600';
 }
 
-const RADIAN = Math.PI / 180;
-function renderPieLabel({ cx, cy, midAngle, innerRadius, outerRadius, percent, name, value }) {
-  const radius = innerRadius + (outerRadius - innerRadius) * 1.4;
-  const x = cx + radius * Math.cos(-midAngle * RADIAN);
-  const y = cy + radius * Math.sin(-midAngle * RADIAN);
-  return (
-    <text x={x} y={y} fill="#374151" textAnchor={x > cx ? 'start' : 'end'} dominantBaseline="central" className="text-xs">
-      {`${name}: ${value} (${(percent * 100).toFixed(0)}%)`}
-    </text>
-  );
-}
 
 export default function Dashboard() {
   const [stats, setStats] = useState(null);
   const [activity, setActivity] = useState(null);
   const [projectSummary, setProjectSummary] = useState(null);
+  const [teamAssignments, setTeamAssignments] = useState(null);
   const [error, setError] = useState(null);
 
   useEffect(() => {
@@ -65,25 +35,14 @@ export default function Dashboard() {
       authFetch('/api/dashboard/stats').then(r => r.json()),
       authFetch('/api/dashboard/activity').then(r => r.json()),
       authFetch('/api/dashboard/project-summary').then(r => r.json()),
+      authFetch('/api/dashboard/team-assignments').then(r => r.json()),
     ])
-      .then(([s, a, p]) => { setStats(s); setActivity(a); setProjectSummary(p); })
+      .then(([s, a, p, t]) => { setStats(s); setActivity(a); setProjectSummary(p); setTeamAssignments(t); })
       .catch((err) => setError(err.message));
   }, []);
 
   if (error) return <div className="p-3 bg-red-50 text-red-700 rounded-md text-sm">{error}</div>;
   if (!stats) return <p className="text-gray-500">Loading...</p>;
-
-  const pieData = (stats.status_breakdown || []).map(s => ({
-    name: s.status.charAt(0).toUpperCase() + s.status.slice(1),
-    value: s.count,
-    key: s.status,
-  }));
-
-  const barData = (stats.priority_breakdown || []).map(p => ({
-    name: p.priority.charAt(0).toUpperCase() + p.priority.slice(1),
-    count: p.count,
-    key: p.priority,
-  }));
 
   return (
     <div>
@@ -212,54 +171,50 @@ export default function Dashboard() {
         )}
       </div>
 
-      {/* Charts */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-        {/* Pie Chart — Status Distribution */}
-        {pieData.length > 0 && (
-          <div className="bg-white border border-gray-200 rounded-lg p-4">
-            <h3 className="text-sm font-medium text-gray-500 mb-2 text-center">Test Case Status Distribution</h3>
-            <ResponsiveContainer width="100%" height={300}>
-              <PieChart>
-                <Pie
-                  data={pieData}
-                  cx="50%"
-                  cy="50%"
-                  outerRadius={90}
-                  dataKey="value"
-                  label={renderPieLabel}
-                  labelLine={true}
-                >
-                  {pieData.map((entry) => (
-                    <Cell key={entry.key} fill={pieColors[entry.key] || '#6B7280'} />
-                  ))}
-                </Pie>
-                <Legend />
-                <Tooltip />
-              </PieChart>
-            </ResponsiveContainer>
+      {/* Team Assignments */}
+      {teamAssignments && teamAssignments.length > 0 && (
+        <div className="mb-8">
+          <h3 className="text-sm font-medium text-gray-500 mb-3">Team Assignments</h3>
+          <div className="bg-white border border-gray-200 rounded-lg divide-y divide-gray-100">
+            {[...teamAssignments].sort((a, b) => b.project_count - a.project_count).map((member) => (
+              <div key={member.id} className="px-4 py-3 flex items-start gap-3">
+                <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center text-sm font-semibold flex-shrink-0 mt-0.5">
+                  {member.name.charAt(0).toUpperCase()}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-semibold text-gray-800">{member.name}</span>
+                    <span className="text-xs text-gray-400 capitalize">{member.role}</span>
+                  </div>
+                  {member.projects.length > 0 ? (
+                    <div className="flex flex-wrap gap-1.5 mt-1.5">
+                      {member.projects.map((p) => (
+                        <Link
+                          key={p.id}
+                          to={`/projects/${p.id}`}
+                          className={`inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full hover:opacity-80 transition-opacity ${
+                            p.status === 'active'
+                              ? 'bg-blue-50 text-blue-700'
+                              : 'bg-gray-100 text-gray-500'
+                          }`}
+                        >
+                          <span className={`w-1.5 h-1.5 rounded-full ${p.status === 'active' ? 'bg-blue-400' : 'bg-gray-300'}`} />
+                          {p.name}
+                        </Link>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-gray-300 mt-1">No projects assigned</p>
+                  )}
+                </div>
+                <span className="text-xs text-gray-400 flex-shrink-0 mt-1">
+                  {member.project_count} project{member.project_count !== 1 ? 's' : ''}
+                </span>
+              </div>
+            ))}
           </div>
-        )}
-
-        {/* Bar Chart — Priority */}
-        {barData.length > 0 && (
-          <div className="bg-white border border-gray-200 rounded-lg p-4">
-            <h3 className="text-sm font-medium text-gray-500 mb-2 text-center">Test Cases by Priority</h3>
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={barData} margin={{ top: 10, right: 20, left: 0, bottom: 5 }}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="name" tick={{ fontSize: 12 }} />
-                <YAxis allowDecimals={false} tick={{ fontSize: 12 }} />
-                <Tooltip />
-                <Bar dataKey="count" name="Test Cases" radius={[4, 4, 0, 0]} label={{ position: 'top', fontSize: 12 }}>
-                  {barData.map((entry) => (
-                    <Cell key={entry.key} fill={barColors[entry.key] || '#3B82F6'} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* Open Bugs by Severity */}
       {stats.bugs_by_severity.length > 0 && (
@@ -310,34 +265,46 @@ export default function Dashboard() {
           )}
         </div>
 
-        {/* Recent Test Results */}
+        {/* Recent Test Runs */}
         <div>
-          <h3 className="text-sm font-medium text-gray-500 mb-3">Recent Test Executions</h3>
-          {activity && activity.recent_results.length > 0 ? (
+          <h3 className="text-sm font-medium text-gray-500 mb-3">Recent Test Runs</h3>
+          {activity && activity.recent_runs && activity.recent_runs.length > 0 ? (
             <div className="bg-white border border-gray-200 rounded-lg divide-y divide-gray-100">
-              {activity.recent_results.map((r, i) => (
-                <div key={i} className="px-4 py-3 flex items-center justify-between">
-                  <div className="min-w-0">
-                    {r.project_id ? (
-                      <Link to={`/projects/${r.project_id}/test-scripts/${r.test_case_id}`} className="text-sm text-blue-600 hover:text-blue-800 font-medium truncate block">
-                        {r.test_case_title}
+              {activity.recent_runs.map((run) => {
+                const executed = run.passed + run.failed + run.blocked;
+                const rate = executed > 0 ? Math.round((run.passed / executed) * 100) : null;
+                return (
+                  <div key={run.id} className="px-4 py-3 flex items-center justify-between">
+                    <div className="min-w-0 flex-1">
+                      <Link to={`/test-runs/${run.id}`} className="text-sm text-blue-600 hover:text-blue-800 font-medium truncate block">
+                        {run.name}
                       </Link>
-                    ) : (
-                      <span className="text-sm text-gray-800 font-medium truncate block">{r.test_case_title}</span>
-                    )}
-                    <p className="text-xs text-gray-400">
-                      in <Link to={`/test-runs/${r.test_run_id}`} className="text-blue-500 hover:text-blue-700">{r.test_run_name}</Link>
-                      {r.executed_by_name && <span> by {r.executed_by_name}</span>}
-                    </p>
+                      <p className="text-xs text-gray-400">
+                        {run.project_name && <span>{run.project_name} &middot; </span>}
+                        {run.date || run.created_at}
+                        {run.created_by_name && <span> &middot; {run.created_by_name}</span>}
+                      </p>
+                    </div>
+                    <div className="ml-3 flex items-center gap-2 flex-shrink-0">
+                      {run.total > 0 && (
+                        <div className="flex gap-1 text-xs">
+                          {run.passed > 0 && <span className="px-1.5 py-0.5 bg-green-100 text-green-800 rounded">{run.passed}P</span>}
+                          {run.failed > 0 && <span className="px-1.5 py-0.5 bg-red-100 text-red-800 rounded">{run.failed}F</span>}
+                          {run.blocked > 0 && <span className="px-1.5 py-0.5 bg-yellow-100 text-yellow-800 rounded">{run.blocked}B</span>}
+                        </div>
+                      )}
+                      {rate !== null ? (
+                        <span className={`text-xs font-bold ${passRateColor(rate)}`}>{rate}%</span>
+                      ) : (
+                        <span className="text-xs text-gray-300">&mdash;</span>
+                      )}
+                    </div>
                   </div>
-                  <span className={`ml-2 shrink-0 inline-block px-2 py-0.5 text-xs font-medium rounded capitalize ${resultColors[r.status] || 'bg-gray-100 text-gray-600'}`}>
-                    {r.status}
-                  </span>
-                </div>
-              ))}
+                );
+              })}
             </div>
           ) : (
-            <p className="text-sm text-gray-400">No test executions yet.</p>
+            <p className="text-sm text-gray-400">No test runs yet.</p>
           )}
         </div>
       </div>

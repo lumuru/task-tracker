@@ -249,17 +249,45 @@ router.patch('/bulk-status', (req, res) => {
 
 // DELETE /api/projects/:projectId/test-scripts/ai-generated — delete all AI-generated scripts
 router.delete('/ai-generated', (req, res) => {
-  const { projectId } = req.params;
+  try {
+    const { projectId } = req.params;
 
-  if (!getProject(projectId)) {
-    return res.status(404).json({ error: 'Project not found' });
+    if (!getProject(projectId)) {
+      return res.status(404).json({ error: 'Project not found' });
+    }
+
+    // Get IDs of AI-generated scripts to clean up related data
+    const aiScriptIds = db.prepare(
+      "SELECT id FROM test_cases WHERE project_id = ? AND source = 'ai_generated'"
+    ).all(projectId).map(r => r.id);
+
+    let unlinkedBugs = 0;
+    let deletedResults = 0;
+
+    if (aiScriptIds.length > 0) {
+      const placeholders = aiScriptIds.map(() => '?').join(',');
+
+      // Unlink bugs — keep the bug but remove the test_case_id reference
+      unlinkedBugs = db.prepare(
+        `UPDATE bugs SET test_case_id = NULL WHERE test_case_id IN (${placeholders})`
+      ).run(...aiScriptIds).changes;
+
+      // Delete test results that reference these scripts
+      deletedResults = db.prepare(
+        `DELETE FROM test_results WHERE test_case_id IN (${placeholders})`
+      ).run(...aiScriptIds).changes;
+    }
+
+    // Now safe to delete the test cases
+    const result = db.prepare(
+      "DELETE FROM test_cases WHERE project_id = ? AND source = 'ai_generated'"
+    ).run(projectId);
+
+    res.json({ deleted: result.changes, unlinkedBugs, deletedResults });
+  } catch (err) {
+    console.error('Delete AI scripts error:', err);
+    res.status(500).json({ error: 'Failed to delete AI-generated scripts: ' + err.message });
   }
-
-  const result = db.prepare(
-    "DELETE FROM test_cases WHERE project_id = ? AND source = 'ai_generated'"
-  ).run(projectId);
-
-  res.json({ deleted: result.changes });
 });
 
 // DELETE /api/projects/:projectId/test-scripts/:id — delete test script
@@ -374,67 +402,72 @@ router.post('/upload', upload.single('file'), (req, res) => {
 
 // POST /api/projects/:projectId/test-scripts/batch — bulk import generated test scripts
 router.post('/batch', (req, res) => {
-  const { projectId } = req.params;
-  const { scripts, source, usage } = req.body;
+  try {
+    const { projectId } = req.params;
+    const { scripts, source, usage } = req.body;
 
-  if (!scripts || !Array.isArray(scripts) || scripts.length === 0) {
-    return res.status(400).json({ error: 'scripts array is required' });
-  }
-
-  const project = db.prepare('SELECT id FROM projects WHERE id = ?').get(projectId);
-  if (!project) {
-    return res.status(404).json({ error: 'Project not found' });
-  }
-
-  const validSources = ['manual', 'ai_generated', 'imported'];
-  const sourceValue = validSources.includes(source) ? source : 'manual';
-
-  const stmt = db.prepare(`
-    INSERT INTO test_cases (title, module, description, preconditions, steps, expected_result, priority, status, project_id, source)
-    VALUES (?, ?, ?, ?, ?, ?, ?, 'draft', ?, ?)
-  `);
-
-  let imported = 0;
-  for (const s of scripts) {
-    if (!s.title) continue;
-    stmt.run(
-      s.title,
-      s.module || null,
-      s.description || null,
-      s.preconditions || null,
-      s.steps || null,
-      s.expected_result || null,
-      s.priority || 'medium',
-      projectId,
-      sourceValue,
-    );
-    imported++;
-  }
-
-  // Update generated_at timestamp if AI-generated
-  if (sourceValue === 'ai_generated' && imported > 0) {
-    db.prepare("UPDATE projects SET generated_at = datetime('now') WHERE id = ?").run(projectId);
-
-    // Log AI generation usage
-    if (usage) {
-      db.prepare(`
-        INSERT INTO ai_generation_logs (project_id, user_id, model, prompt_tokens, completion_tokens, total_tokens, cost_estimate, scripts_generated, thinking_enabled)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(
-        projectId,
-        req.user?.id || null,
-        usage.model || 'unknown',
-        usage.prompt_tokens || 0,
-        usage.completion_tokens || 0,
-        usage.total_tokens || 0,
-        usage.cost_estimate || 0,
-        imported,
-        usage.thinking_enabled ? 1 : 0,
-      );
+    if (!scripts || !Array.isArray(scripts) || scripts.length === 0) {
+      return res.status(400).json({ error: 'scripts array is required' });
     }
-  }
 
-  res.json({ imported, total: scripts.length });
+    const project = db.prepare('SELECT id FROM projects WHERE id = ?').get(projectId);
+    if (!project) {
+      return res.status(404).json({ error: 'Project not found' });
+    }
+
+    const validSources = ['manual', 'ai_generated', 'imported'];
+    const sourceValue = validSources.includes(source) ? source : 'manual';
+
+    const stmt = db.prepare(`
+      INSERT INTO test_cases (title, module, description, preconditions, steps, expected_result, priority, status, project_id, source)
+      VALUES (?, ?, ?, ?, ?, ?, ?, 'draft', ?, ?)
+    `);
+
+    let imported = 0;
+    for (const s of scripts) {
+      if (!s.title) continue;
+      stmt.run(
+        s.title,
+        s.module || null,
+        s.description || null,
+        s.preconditions || null,
+        s.steps || null,
+        s.expected_result || null,
+        s.priority || 'medium',
+        projectId,
+        sourceValue,
+      );
+      imported++;
+    }
+
+    // Update generated_at timestamp if AI-generated
+    if (sourceValue === 'ai_generated' && imported > 0) {
+      db.prepare("UPDATE projects SET generated_at = datetime('now') WHERE id = ?").run(projectId);
+
+      // Log AI generation usage
+      if (usage) {
+        db.prepare(`
+          INSERT INTO ai_generation_logs (project_id, user_id, model, prompt_tokens, completion_tokens, total_tokens, cost_estimate, scripts_generated, thinking_enabled)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(
+          projectId,
+          req.user?.id || null,
+          usage.model || 'unknown',
+          usage.prompt_tokens || 0,
+          usage.completion_tokens || 0,
+          usage.total_tokens || 0,
+          usage.cost_estimate || 0,
+          imported,
+          usage.thinking_enabled ? 1 : 0,
+        );
+      }
+    }
+
+    res.json({ imported, total: scripts.length });
+  } catch (err) {
+    console.error('Batch import error:', err);
+    res.status(500).json({ error: 'Failed to import scripts: ' + err.message });
+  }
 });
 
 module.exports = router;

@@ -13,6 +13,15 @@ const statusLabels = {
   archived: 'Archived',
 };
 
+const priorityOrder = { critical: 0, high: 1, medium: 2, low: 3 };
+const priorityColors = {
+  critical: 'text-red-600',
+  high: 'text-orange-500',
+  medium: 'text-yellow-500',
+  low: 'text-green-500',
+};
+const priorityLabels = { critical: 'Critical', high: 'High', medium: 'Medium', low: 'Low' };
+
 function OverflowMenu({ onDelete, hasTestScripts }) {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
@@ -95,7 +104,7 @@ export default function Projects() {
       p.name.toLowerCase().includes(q) ||
       (p.description || '').toLowerCase().includes(q)
     );
-  });
+  }).sort((a, b) => (priorityOrder[a.priority] ?? 2) - (priorityOrder[b.priority] ?? 2));
 
   return (
     <div>
@@ -148,9 +157,12 @@ export default function Projects() {
                 title={statusLabels[project.status] || project.status}
               />
 
-              {/* Name */}
+              {/* Name + Priority */}
               <span className="text-sm font-semibold text-gray-800 min-w-0 truncate flex-1">
                 {project.name}
+              </span>
+              <span className={`text-xs font-medium flex-shrink-0 ${priorityColors[project.priority] || 'text-gray-400'}`}>
+                {priorityLabels[project.priority] || 'Medium'}
               </span>
 
               {/* Stats */}

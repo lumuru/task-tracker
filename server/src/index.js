@@ -40,6 +40,12 @@ app.use('/api/dashboard', requireAuth, dashboardRouter);
 app.use('/api/generate', requireAuth, generateRouter);
 app.use('/api/settings', requireAuth, settingsRouter);
 
+// Global error handler for API routes — return JSON instead of HTML
+app.use('/api', (err, req, res, next) => {
+  console.error('Unhandled API error:', err);
+  res.status(500).json({ error: err.message || 'Internal server error' });
+});
+
 // Serve built React frontend in production
 const clientDistPath = path.join(__dirname, '../../client/dist');
 if (fs.existsSync(clientDistPath)) {

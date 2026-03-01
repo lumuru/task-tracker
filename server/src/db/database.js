@@ -161,6 +161,12 @@ if (!tcColsSource.some(c => c.name === 'source')) {
   db.exec("ALTER TABLE test_cases ADD COLUMN source TEXT DEFAULT 'manual'");
 }
 
+// Migration: add priority column to projects if it doesn't exist
+const projColsCheck = db.prepare("PRAGMA table_info(projects)").all();
+if (!projColsCheck.some(c => c.name === 'priority')) {
+  db.exec("ALTER TABLE projects ADD COLUMN priority TEXT DEFAULT 'medium'");
+}
+
 // Migration: add generated_at column to projects if it doesn't exist
 const projCols = db.prepare("PRAGMA table_info(projects)").all();
 if (!projCols.some(c => c.name === 'generated_at')) {

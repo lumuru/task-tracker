@@ -83,16 +83,16 @@ router.get('/:id', (req, res) => {
 
 // POST /api/projects — create project
 router.post('/', (req, res) => {
-  const { name, description, status, created_by, member_ids } = req.body;
+  const { name, description, status, priority, created_by, member_ids } = req.body;
 
   if (!name || !name.trim()) {
     return res.status(400).json({ error: 'Name is required' });
   }
 
   const stmt = db.prepare(
-    'INSERT INTO projects (name, description, status, created_by) VALUES (?, ?, ?, ?)'
+    'INSERT INTO projects (name, description, status, priority, created_by) VALUES (?, ?, ?, ?, ?)'
   );
-  const result = stmt.run(name.trim(), description || null, status || 'active', created_by || null);
+  const result = stmt.run(name.trim(), description || null, status || 'active', priority || 'medium', created_by || null);
   const projectId = result.lastInsertRowid;
 
   if (member_ids && member_ids.length > 0) {
@@ -111,7 +111,7 @@ router.post('/', (req, res) => {
 // PUT /api/projects/:id — update project
 router.put('/:id', (req, res) => {
   const { id } = req.params;
-  const { name, description, status } = req.body;
+  const { name, description, status, priority } = req.body;
 
   const existing = db.prepare('SELECT * FROM projects WHERE id = ?').get(id);
   if (!existing) {
@@ -123,8 +123,8 @@ router.put('/:id', (req, res) => {
   }
 
   db.prepare(
-    "UPDATE projects SET name = ?, description = ?, status = ?, updated_at = datetime('now') WHERE id = ?"
-  ).run(name.trim(), description || null, status || 'active', id);
+    "UPDATE projects SET name = ?, description = ?, status = ?, priority = ?, updated_at = datetime('now') WHERE id = ?"
+  ).run(name.trim(), description || null, status || 'active', priority || 'medium', id);
 
   const project = db.prepare('SELECT * FROM projects WHERE id = ?').get(id);
   res.json(project);
