@@ -1,6 +1,6 @@
 import { useState, useEffect, Fragment } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { getTestRun, updateTestRunResults, getTestRunSummary } from '../api/testRuns';
+import { getTestRun, updateTestRunResults, getTestRunSummary, exportTestRun } from '../api/testRuns';
 import { getMembers } from '../api/members';
 
 const RESULT_OPTIONS = ['pending', 'pass', 'fail', 'blocked', 'skipped'];
@@ -32,6 +32,7 @@ export default function TestRunExecution() {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [expandedId, setExpandedId] = useState(null);
+  const [exporting, setExporting] = useState(false);
 
   const fetchData = async () => {
     try {
@@ -96,6 +97,17 @@ export default function TestRunExecution() {
     }
   };
 
+  const handleExport = async () => {
+    setExporting(true);
+    try {
+      await exportTestRun(id);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setExporting(false);
+    }
+  };
+
   if (error && !run) return <div className="p-3 bg-red-50 text-red-700 rounded-md text-sm">{error}</div>;
   if (!run) return <p className="text-gray-500">Loading...</p>;
 
@@ -130,6 +142,15 @@ export default function TestRunExecution() {
             <option value="">Executed by...</option>
             {members.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
           </select>
+          {!liveCounts.pending && (
+            <button
+              onClick={handleExport}
+              disabled={exporting}
+              className={`px-4 py-2 text-sm font-medium rounded-md text-white ${exporting ? 'bg-gray-400' : 'bg-green-600 hover:bg-green-700'}`}
+            >
+              {exporting ? 'Exporting...' : 'Download Report'}
+            </button>
+          )}
           <button
             onClick={handleSave}
             disabled={saving}

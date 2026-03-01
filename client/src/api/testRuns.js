@@ -45,6 +45,21 @@ export async function deleteTestRun(id) {
   return res.json();
 }
 
+export async function exportTestRun(id) {
+  const res = await authFetch(`/api/test-runs/${id}/export`);
+  if (!res.ok) throw new Error('Failed to export test run');
+  const blob = await res.blob();
+  const disposition = res.headers.get('Content-Disposition') || '';
+  const match = disposition.match(/filename="(.+)"/);
+  const filename = match ? match[1] : `Test Run ${id}.xlsx`;
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 export async function getTestRunSummary(id) {
   const res = await authFetch(`/api/test-runs/${id}/summary`);
   if (!res.ok) throw new Error('Failed to fetch summary');

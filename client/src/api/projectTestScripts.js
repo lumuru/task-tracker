@@ -78,11 +78,6 @@ export async function bulkUpdateTestScriptStatus(projectId, ids, status) {
   return res.json();
 }
 
-export function exportProjectTestScriptsUrl(projectId) {
-  const BASE_URL = import.meta.env.VITE_API_URL || '';
-  return `${BASE_URL}/api/projects/${projectId}/test-scripts/export`;
-}
-
 export async function uploadProjectTestScripts(projectId, file, createdBy) {
   const formData = new FormData();
   formData.append('file', file);

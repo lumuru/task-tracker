@@ -1,4 +1,5 @@
 const express = require('express');
+const XLSX = require('xlsx');
 const db = require('../db/database');
 
 const router = express.Router();
@@ -140,6 +141,66 @@ router.get('/:id/summary', (req, res) => {
     executed,
     pass_rate: executed > 0 ? Math.round((counts.passed / executed) * 100) : 0,
   });
+});
+
+// GET /api/test-runs/:id/export — download test run results as Excel
+router.get('/:id/export', (req, res) => {
+  const run = db.prepare(`
+    SELECT tr.*, p.name as project_name
+    FROM test_runs tr
+    LEFT JOIN projects p ON tr.project_id = p.id
+    WHERE tr.id = ?
+  `).get(req.params.id);
+
+  if (!run) {
+    return res.status(404).json({ error: 'Test run not found' });
+  }
+
+  const results = db.prepare(`
+    SELECT r.*, tc.id as tc_id, tc.title, tc.module, tc.steps, tc.expected_result,
+           tm.name as executed_by_name
+    FROM test_results r
+    JOIN test_cases tc ON r.test_case_id = tc.id
+    LEFT JOIN team_members tm ON r.executed_by = tm.id
+    WHERE r.test_run_id = ?
+    ORDER BY tc.module, tc.title
+  `).all(req.params.id);
+
+  const rows = results.map(r => ({
+    'Test Case ID': r.tc_id,
+    'Module': r.module || '',
+    'Test Case Title': r.title,
+    'Steps': r.steps || '',
+    'Expected Result': r.expected_result || '',
+    'Status': r.status || '',
+    'Notes': r.notes || '',
+    'Executed By': r.executed_by_name || '',
+    'Executed At': r.executed_at || '',
+  }));
+
+  const worksheet = XLSX.utils.json_to_sheet(rows);
+
+  worksheet['!cols'] = [
+    { wch: 12 },  // Test Case ID
+    { wch: 20 },  // Module
+    { wch: 35 },  // Test Case Title
+    { wch: 45 },  // Steps
+    { wch: 35 },  // Expected Result
+    { wch: 10 },  // Status
+    { wch: 30 },  // Notes
+    { wch: 18 },  // Executed By
+    { wch: 20 },  // Executed At
+  ];
+
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, worksheet, 'Test Run Results');
+
+  const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+
+  const filename = `Test Run - ${run.name}.xlsx`;
+  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+  res.send(buffer);
 });
 
 // DELETE /api/test-runs/:id — delete a test run and its results

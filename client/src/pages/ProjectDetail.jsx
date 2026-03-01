@@ -3,7 +3,7 @@ import { useParams, Link, useNavigate } from 'react-router-dom';
 import FuzzyFilter, { fuzzyMatch } from '../components/FuzzyFilter';
 import { getProject, deleteProject, addProjectMembers, removeProjectMember, getProjectActivity } from '../api/projects';
 import { getMembers } from '../api/members';
-import { getProjectTestScripts, getProjectTestScriptModules, deleteProjectTestScript, uploadProjectTestScripts, exportProjectTestScriptsUrl, bulkUpdateTestScriptStatus } from '../api/projectTestScripts';
+import { getProjectTestScripts, getProjectTestScriptModules, deleteProjectTestScript, uploadProjectTestScripts, bulkUpdateTestScriptStatus } from '../api/projectTestScripts';
 import { getBugs, deleteBug } from '../api/bugs';
 
 const statusColors = {
@@ -322,12 +322,6 @@ function TestScriptsTab({ projectId, project }) {
         />
 
         <div className="ml-auto flex gap-2">
-          <a
-            href={exportProjectTestScriptsUrl(projectId)}
-            className="px-4 py-2.5 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700 transition-colors"
-          >
-            Download Excel
-          </a>
           <label className={`px-4 py-2.5 text-sm font-medium rounded-lg cursor-pointer transition-colors ${uploading ? 'bg-gray-300 text-gray-500' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>
             {uploading ? 'Uploading...' : 'Upload Excel'}
             <input type="file" accept=".xlsx,.xls" onChange={handleUpload} disabled={uploading} className="hidden" />
