@@ -6,6 +6,7 @@ const router = express.Router();
 // GET /api/dashboard/stats
 router.get('/stats', (req, res) => {
   const totalTestCases = db.prepare('SELECT COUNT(*) as count FROM test_cases').get().count;
+  const totalUsers = db.prepare("SELECT COUNT(*) as count FROM team_members WHERE is_active = 1").get().count;
 
   const totalProjects = db.prepare('SELECT COUNT(*) as count FROM projects').get().count;
   const activeProjects = db.prepare("SELECT COUNT(*) as count FROM projects WHERE status = 'active'").get().count;
@@ -113,6 +114,7 @@ router.get('/stats', (req, res) => {
     total_projects: totalProjects,
     active_projects: activeProjects,
     test_cases: totalTestCases,
+    total_users: totalUsers,
     bugs: bugCounts,
     test_runs: totalTestRuns,
     latest_run: latestRunStats,

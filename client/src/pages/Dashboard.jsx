@@ -54,10 +54,10 @@ export default function Dashboard() {
           <p className="text-sm text-gray-500">Total Projects</p>
           <p className="text-3xl font-bold text-gray-800 mt-1">{stats.total_projects}</p>
         </Link>
-        <Link to="/test-cases" className="p-5 bg-white rounded-lg border border-gray-200 hover:shadow-md transition-shadow">
-          <p className="text-sm text-gray-500">Total Test Cases</p>
-          <p className="text-3xl font-bold text-gray-800 mt-1">{stats.test_cases}</p>
-        </Link>
+        <div className="p-5 bg-white rounded-lg border border-gray-200">
+          <p className="text-sm text-gray-500">Testers</p>
+          <p className="text-3xl font-bold text-gray-800 mt-1">{stats.total_users}</p>
+        </div>
         <Link to="/projects" className="p-5 bg-white rounded-lg border border-gray-200 hover:shadow-md transition-shadow">
           <p className="text-sm text-gray-500">Active Projects</p>
           <p className="text-3xl font-bold text-green-600 mt-1">{stats.active_projects}</p>
