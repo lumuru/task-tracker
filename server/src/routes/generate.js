@@ -96,9 +96,9 @@ router.post('/process', async (req, res) => {
       return;
     }
 
-    const scripts = await generateScripts(text);
+    const { scripts, usage } = await generateScripts(text);
     cleanupSession(sessionId);
-    jobs.set(sessionId, { status: 'done', scripts, createdAt: Date.now() });
+    jobs.set(sessionId, { status: 'done', scripts, usage, createdAt: Date.now() });
   } catch (err) {
     cleanupSession(sessionId);
     console.error('Generate process error:', err.message);
@@ -122,10 +122,10 @@ router.get('/status/:sessionId', (req, res) => {
     return res.json({ status: 'error', error: job.error });
   }
 
-  // Done — return scripts and clean up
-  const { scripts } = job;
+  // Done — return scripts and usage, clean up
+  const { scripts, usage } = job;
   jobs.delete(req.params.sessionId);
-  res.json({ status: 'done', scripts });
+  res.json({ status: 'done', scripts, usage });
 });
 
 module.exports = router;

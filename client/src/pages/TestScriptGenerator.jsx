@@ -365,6 +365,7 @@ export default function TestScriptGenerator() {
   const [scripts, setScripts] = useState([]);
   const [error, setError] = useState(null);
   const [importing, setImporting] = useState(false);
+  const [usage, setUsage] = useState(null);
   const [generatedAt, setGeneratedAt] = useState(null);
   const [showRegenWarning, setShowRegenWarning] = useState(false);
   const [pendingFile, setPendingFile] = useState(null);
@@ -385,7 +386,8 @@ export default function TestScriptGenerator() {
 
     try {
       const result = await generateTestScripts(selectedFile, setProgress);
-      setScripts(result);
+      setScripts(result.scripts);
+      setUsage(result.usage || null);
       setPhase('review');
     } catch (err) {
       setError(err.message);
@@ -423,7 +425,7 @@ export default function TestScriptGenerator() {
       if (generatedAt) {
         await deleteAiGeneratedScripts(projectId);
       }
-      const result = await batchImportScripts(projectId, selectedScripts, 'ai_generated');
+      const result = await batchImportScripts(projectId, selectedScripts, 'ai_generated', usage);
       setPhase('done');
       setTimeout(() => {
         navigate(`/projects/${projectId}`, { state: { importedCount: result.imported } });

@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import { getMembers, createMember, updateMember, deleteMember } from '../api/members';
-import { getSettings, updateSettings } from '../api/settings';
+import { getSettings, updateSettings, getGenerationLogs } from '../api/settings';
 import { useAuth } from '../context/AuthContext';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 
 const roleColors = {
   admin: 'bg-purple-100 text-purple-700',
@@ -22,6 +22,13 @@ export default function Settings() {
   const [aiLoading, setAiLoading] = useState(true);
   const [aiSaving, setAiSaving] = useState(false);
   const [aiMsg, setAiMsg] = useState(null);
+
+  // Generation logs state
+  const [genLogs, setGenLogs] = useState([]);
+  const [genLogsTotal, setGenLogsTotal] = useState(0);
+  const [genLogsPage, setGenLogsPage] = useState(1);
+  const [genLogsLoading, setGenLogsLoading] = useState(true);
+  const genLogsLimit = 20;
 
   // Form state
   const [showForm, setShowForm] = useState(false);
@@ -61,6 +68,20 @@ export default function Settings() {
       .catch(() => {})
       .finally(() => setAiLoading(false));
   }, []);
+
+  const fetchGenLogs = (page) => {
+    setGenLogsLoading(true);
+    getGenerationLogs(page, genLogsLimit)
+      .then((data) => {
+        setGenLogs(data.logs);
+        setGenLogsTotal(data.total);
+        setGenLogsPage(data.page);
+      })
+      .catch(() => {})
+      .finally(() => setGenLogsLoading(false));
+  };
+
+  useEffect(() => { fetchGenLogs(1); }, []);
 
   const handleAiSave = async () => {
     setAiSaving(true);
@@ -184,6 +205,103 @@ export default function Settings() {
             >
               {aiSaving ? 'Saving...' : 'Save AI Settings'}
             </button>
+          </>
+        )}
+      </div>
+
+      {/* AI Generation Log */}
+      <div className="mb-8 p-4 bg-white border border-gray-200 rounded-lg">
+        <h2 className="text-2xl font-bold text-gray-800 mb-4">AI Generation Log</h2>
+        {genLogsLoading && genLogs.length === 0 ? (
+          <p className="text-gray-500">Loading...</p>
+        ) : genLogs.length === 0 ? (
+          <p className="text-gray-500">No AI generations recorded yet.</p>
+        ) : (
+          <>
+            {/* Summary */}
+            <div className="grid grid-cols-3 gap-4 mb-4">
+              <div className="p-3 bg-gray-50 rounded-lg text-center">
+                <p className="text-2xl font-bold text-gray-800">{genLogsTotal}</p>
+                <p className="text-xs text-gray-500">Total Generations</p>
+              </div>
+              <div className="p-3 bg-gray-50 rounded-lg text-center">
+                <p className="text-2xl font-bold text-gray-800">
+                  {genLogs.reduce((sum, l) => sum + (l.total_tokens || 0), 0).toLocaleString()}
+                </p>
+                <p className="text-xs text-gray-500">Tokens (this page)</p>
+              </div>
+              <div className="p-3 bg-gray-50 rounded-lg text-center">
+                <p className="text-2xl font-bold text-gray-800">
+                  ${genLogs.reduce((sum, l) => sum + (l.cost_estimate || 0), 0).toFixed(4)}
+                </p>
+                <p className="text-xs text-gray-500">Est. Cost (this page)</p>
+              </div>
+            </div>
+
+            {/* Table */}
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200 text-sm">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
+                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Project</th>
+                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">User</th>
+                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Model</th>
+                    <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">Prompt</th>
+                    <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">Completion</th>
+                    <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">Total</th>
+                    <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">Cost</th>
+                    <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">Scripts</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200">
+                  {genLogs.map((log) => (
+                    <tr key={log.id}>
+                      <td className="px-3 py-2 text-gray-500 whitespace-nowrap">
+                        {new Date(log.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                      </td>
+                      <td className="px-3 py-2">
+                        {log.project_id ? (
+                          <Link to={`/projects/${log.project_id}`} className="text-blue-600 hover:text-blue-800">
+                            {log.project_name || `Project #${log.project_id}`}
+                          </Link>
+                        ) : '—'}
+                      </td>
+                      <td className="px-3 py-2 text-gray-700">{log.user_name || '—'}</td>
+                      <td className="px-3 py-2 text-gray-700 font-mono text-xs">{log.model}</td>
+                      <td className="px-3 py-2 text-right text-gray-600">{(log.prompt_tokens || 0).toLocaleString()}</td>
+                      <td className="px-3 py-2 text-right text-gray-600">{(log.completion_tokens || 0).toLocaleString()}</td>
+                      <td className="px-3 py-2 text-right text-gray-800 font-medium">{(log.total_tokens || 0).toLocaleString()}</td>
+                      <td className="px-3 py-2 text-right text-gray-600">${(log.cost_estimate || 0).toFixed(4)}</td>
+                      <td className="px-3 py-2 text-right text-gray-800 font-medium">{log.scripts_generated}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Pagination */}
+            {genLogsTotal > genLogsLimit && (
+              <div className="flex items-center justify-between mt-3">
+                <button
+                  onClick={() => fetchGenLogs(genLogsPage - 1)}
+                  disabled={genLogsPage <= 1}
+                  className="px-3 py-1.5 text-sm text-gray-600 bg-gray-100 rounded hover:bg-gray-200 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  Previous
+                </button>
+                <span className="text-sm text-gray-500">
+                  Page {genLogsPage} of {Math.ceil(genLogsTotal / genLogsLimit)}
+                </span>
+                <button
+                  onClick={() => fetchGenLogs(genLogsPage + 1)}
+                  disabled={genLogsPage >= Math.ceil(genLogsTotal / genLogsLimit)}
+                  className="px-3 py-1.5 text-sm text-gray-600 bg-gray-100 rounded hover:bg-gray-200 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  Next
+                </button>
+              </div>
+            )}
           </>
         )}
       </div>

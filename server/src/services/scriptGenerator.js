@@ -50,6 +50,22 @@ Generate as many test scripts as needed to achieve FULL coverage of every requir
 Respond ONLY with valid JSON in this format:
 { "test_scripts": [ { "title": "...", "module": "...", "priority": "...", "steps": "...", "expected_result": "...", "preconditions": "..." } ] }`;
 
+// Cost per million tokens: [input, output]
+const MODEL_PRICING = {
+  'openai/gpt-4o':               [2.50, 10.00],
+  'openai/gpt-4o-mini':          [0.15, 0.60],
+  'anthropic/claude-sonnet-4':   [3.00, 15.00],
+  'anthropic/claude-opus-4':     [15.00, 75.00],
+  'google/gemini-2.5-pro':       [1.25, 10.00],
+};
+
+function estimateCost(model, promptTokens, completionTokens) {
+  const pricing = MODEL_PRICING[model];
+  if (!pricing) return 0;
+  const [inputRate, outputRate] = pricing;
+  return (promptTokens * inputRate + completionTokens * outputRate) / 1_000_000;
+}
+
 function normalizeSteps(steps) {
   if (!steps) return '';
   let text = String(steps);
@@ -94,6 +110,13 @@ async function generateScripts(text) {
   };
 
   const response = await client.chat.completions.create(requestParams);
+
+  // Extract usage metadata
+  const responseModel = response.model || model;
+  const promptTokens = response.usage?.prompt_tokens || 0;
+  const completionTokens = response.usage?.completion_tokens || 0;
+  const totalTokens = response.usage?.total_tokens || (promptTokens + completionTokens);
+  const costEstimate = estimateCost(responseModel, promptTokens, completionTokens);
 
   const message = response.choices[0]?.message;
   // Thinking models may return content in `content` or the reasoning in a separate field
@@ -161,7 +184,7 @@ async function generateScripts(text) {
   }
 
   // Normalize and validate each script
-  return scripts.map((s) => ({
+  const normalizedScripts = scripts.map((s) => ({
     title: String(s.title || 'Untitled Test Case'),
     module: String(s.module || ''),
     priority: ['critical', 'high', 'medium', 'low'].includes(s.priority) ? s.priority : 'medium',
@@ -169,6 +192,17 @@ async function generateScripts(text) {
     expected_result: String(s.expected_result || s.expectedResult || ''),
     preconditions: String(s.preconditions || ''),
   }));
+
+  const usage = {
+    model: responseModel,
+    prompt_tokens: promptTokens,
+    completion_tokens: completionTokens,
+    total_tokens: totalTokens,
+    cost_estimate: costEstimate,
+    thinking_enabled: thinkingEnabled,
+  };
+
+  return { scripts: normalizedScripts, usage };
 }
 
 module.exports = { generateScripts };

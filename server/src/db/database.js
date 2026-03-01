@@ -199,6 +199,23 @@ if (!backfillDone) {
   db.prepare("INSERT OR IGNORE INTO app_settings (key, value) VALUES ('backfill_ai_source_done', '1')").run();
 }
 
+// Create ai_generation_logs table
+db.exec(`
+  CREATE TABLE IF NOT EXISTS ai_generation_logs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id INTEGER REFERENCES projects(id),
+    user_id INTEGER REFERENCES team_members(id),
+    model TEXT NOT NULL,
+    prompt_tokens INTEGER DEFAULT 0,
+    completion_tokens INTEGER DEFAULT 0,
+    total_tokens INTEGER DEFAULT 0,
+    cost_estimate REAL DEFAULT 0,
+    scripts_generated INTEGER DEFAULT 0,
+    thinking_enabled INTEGER DEFAULT 0,
+    created_at TEXT DEFAULT (datetime('now'))
+  )
+`);
+
 // Seed default settings from env vars if not already present
 const seedSetting = db.prepare(
   'INSERT OR IGNORE INTO app_settings (key, value, updated_at) VALUES (?, ?, datetime(\'now\'))'

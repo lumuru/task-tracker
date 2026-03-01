@@ -124,10 +124,12 @@ async function pollForResult(sessionId) {
   throw new Error('Generation timed out. Please try again.');
 }
 
-export async function batchImportScripts(projectId, scripts, source = 'ai_generated') {
+export async function batchImportScripts(projectId, scripts, source = 'ai_generated', usage = null) {
+  const body = { scripts, source };
+  if (usage) body.usage = usage;
   const res = await authFetch(`/api/projects/${projectId}/test-scripts/batch`, {
     method: 'POST',
-    body: JSON.stringify({ scripts, source }),
+    body: JSON.stringify(body),
   });
   if (!res.ok) {
     const err = await res.json();
@@ -174,8 +176,8 @@ export async function generateTestScripts(file, onProgress = () => {}) {
   await startProcessing(sessionId);
 
   // Poll until the AI finishes
-  const { scripts } = await pollForResult(sessionId);
+  const { scripts, usage } = await pollForResult(sessionId);
 
   onProgress({ step: 'done', detail: 'Done!', percent: 100 });
-  return scripts;
+  return { scripts, usage };
 }

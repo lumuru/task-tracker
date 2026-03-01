@@ -49,4 +49,31 @@ router.put('/', requireAdmin, (req, res) => {
   }
 });
 
+// GET /api/settings/generation-logs — admin-only AI generation audit log
+router.get('/generation-logs', requireAdmin, (req, res) => {
+  try {
+    const page = Math.max(1, parseInt(req.query.page) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit) || 20));
+    const offset = (page - 1) * limit;
+
+    const total = db.prepare('SELECT COUNT(*) as count FROM ai_generation_logs').get().count;
+
+    const logs = db.prepare(`
+      SELECT
+        g.*,
+        p.name as project_name,
+        tm.name as user_name
+      FROM ai_generation_logs g
+      LEFT JOIN projects p ON g.project_id = p.id
+      LEFT JOIN team_members tm ON g.user_id = tm.id
+      ORDER BY g.created_at DESC
+      LIMIT ? OFFSET ?
+    `).all(limit, offset);
+
+    res.json({ logs, total, page, limit });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;

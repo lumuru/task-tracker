@@ -375,7 +375,7 @@ router.post('/upload', upload.single('file'), (req, res) => {
 // POST /api/projects/:projectId/test-scripts/batch — bulk import generated test scripts
 router.post('/batch', (req, res) => {
   const { projectId } = req.params;
-  const { scripts, source } = req.body;
+  const { scripts, source, usage } = req.body;
 
   if (!scripts || !Array.isArray(scripts) || scripts.length === 0) {
     return res.status(400).json({ error: 'scripts array is required' });
@@ -414,6 +414,24 @@ router.post('/batch', (req, res) => {
   // Update generated_at timestamp if AI-generated
   if (sourceValue === 'ai_generated' && imported > 0) {
     db.prepare("UPDATE projects SET generated_at = datetime('now') WHERE id = ?").run(projectId);
+
+    // Log AI generation usage
+    if (usage) {
+      db.prepare(`
+        INSERT INTO ai_generation_logs (project_id, user_id, model, prompt_tokens, completion_tokens, total_tokens, cost_estimate, scripts_generated, thinking_enabled)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        projectId,
+        req.user?.id || null,
+        usage.model || 'unknown',
+        usage.prompt_tokens || 0,
+        usage.completion_tokens || 0,
+        usage.total_tokens || 0,
+        usage.cost_estimate || 0,
+        imported,
+        usage.thinking_enabled ? 1 : 0,
+      );
+    }
   }
 
   res.json({ imported, total: scripts.length });
