@@ -141,4 +141,20 @@ router.get('/:id/summary', (req, res) => {
   });
 });
 
+// DELETE /api/test-runs/:id — delete a test run and its results
+router.delete('/:id', (req, res) => {
+  const run = db.prepare('SELECT * FROM test_runs WHERE id = ?').get(req.params.id);
+  if (!run) {
+    return res.status(404).json({ error: 'Test run not found' });
+  }
+
+  const deleteRun = db.transaction(() => {
+    db.prepare('DELETE FROM test_results WHERE test_run_id = ?').run(req.params.id);
+    db.prepare('DELETE FROM test_runs WHERE id = ?').run(req.params.id);
+  });
+
+  deleteRun();
+  res.json({ deleted: true });
+});
+
 module.exports = router;

@@ -36,6 +36,15 @@ export async function updateTestRunResults(id, data) {
   return res.json();
 }
 
+export async function deleteTestRun(id) {
+  const res = await authFetch(`/api/test-runs/${id}`, { method: 'DELETE' });
+  if (!res.ok) {
+    const err = await res.json();
+    throw new Error(err.error || 'Failed to delete test run');
+  }
+  return res.json();
+}
+
 export async function getTestRunSummary(id) {
   const res = await authFetch(`/api/test-runs/${id}/summary`);
   if (!res.ok) throw new Error('Failed to fetch summary');

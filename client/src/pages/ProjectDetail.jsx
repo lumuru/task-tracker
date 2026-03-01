@@ -335,12 +335,12 @@ function TestScriptsTab({ projectId, project }) {
           <Link
             to={`/projects/${projectId}/generate`}
             className={`px-4 py-2.5 text-white text-sm font-medium rounded-lg transition-colors ${
-              project.generated_at
+              project.generated_at && scripts.length > 0
                 ? 'bg-amber-600 hover:bg-amber-700'
                 : 'bg-purple-600 hover:bg-purple-700'
             }`}
           >
-            {project.generated_at ? 'Regenerate with AI' : 'Generate with AI'}
+            {project.generated_at && scripts.length > 0 ? 'Regenerate with AI' : 'Generate with AI'}
           </Link>
           <Link
             to={`/projects/${projectId}/test-scripts/new`}
