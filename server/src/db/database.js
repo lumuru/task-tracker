@@ -155,6 +155,36 @@ if (!bugCols.some(c => c.name === 'project_id')) {
   `);
 }
 
+// Migration: add source column to test_cases if it doesn't exist
+const tcColsSource = db.prepare("PRAGMA table_info(test_cases)").all();
+if (!tcColsSource.some(c => c.name === 'source')) {
+  db.exec("ALTER TABLE test_cases ADD COLUMN source TEXT DEFAULT 'manual'");
+}
+
+// Migration: add generated_at column to projects if it doesn't exist
+const projCols = db.prepare("PRAGMA table_info(projects)").all();
+if (!projCols.some(c => c.name === 'generated_at')) {
+  db.exec("ALTER TABLE projects ADD COLUMN generated_at TEXT DEFAULT NULL");
+}
+
+// One-time backfill: tag existing batch-imported scripts as ai_generated
+// Scripts created without a created_by but with a project_id were batch-imported via AI generation
+const backfillDone = db.prepare("SELECT 1 FROM app_settings WHERE key = 'backfill_ai_source_done'").get();
+if (!backfillDone) {
+  db.exec(`
+    UPDATE test_cases SET source = 'ai_generated'
+    WHERE project_id IS NOT NULL AND created_by IS NULL AND source = 'manual'
+  `);
+  // Set generated_at on projects that have AI-generated scripts
+  db.exec(`
+    UPDATE projects SET generated_at = (
+      SELECT MAX(tc.created_at) FROM test_cases tc
+      WHERE tc.project_id = projects.id AND tc.source = 'ai_generated'
+    )
+    WHERE id IN (SELECT DISTINCT project_id FROM test_cases WHERE source = 'ai_generated')
+  `);
+}
+
 // Create app_settings table for in-app configuration
 db.exec(`
   CREATE TABLE IF NOT EXISTS app_settings (
@@ -163,6 +193,11 @@ db.exec(`
     updated_at TEXT DEFAULT (datetime('now'))
   )
 `);
+
+// Insert backfill marker after app_settings table is guaranteed to exist
+if (!backfillDone) {
+  db.prepare("INSERT OR IGNORE INTO app_settings (key, value) VALUES ('backfill_ai_source_done', '1')").run();
+}
 
 // Seed default settings from env vars if not already present
 const seedSetting = db.prepare(

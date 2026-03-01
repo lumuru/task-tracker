@@ -124,14 +124,25 @@ async function pollForResult(sessionId) {
   throw new Error('Generation timed out. Please try again.');
 }
 
-export async function batchImportScripts(projectId, scripts) {
+export async function batchImportScripts(projectId, scripts, source = 'ai_generated') {
   const res = await authFetch(`/api/projects/${projectId}/test-scripts/batch`, {
     method: 'POST',
-    body: JSON.stringify({ scripts }),
+    body: JSON.stringify({ scripts, source }),
   });
   if (!res.ok) {
     const err = await res.json();
     throw new Error(err.error || 'Failed to import scripts');
+  }
+  return res.json();
+}
+
+export async function deleteAiGeneratedScripts(projectId) {
+  const res = await authFetch(`/api/projects/${projectId}/test-scripts/ai-generated`, {
+    method: 'DELETE',
+  });
+  if (!res.ok) {
+    const err = await res.json();
+    throw new Error(err.error || 'Failed to delete AI-generated scripts');
   }
   return res.json();
 }

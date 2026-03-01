@@ -187,7 +187,7 @@ function OverviewTab({ project, allMembers, onAddMember, onRemoveMember, testScr
 
 
 // ── Test Scripts Tab ─────────────────────────────────────────
-function TestScriptsTab({ projectId }) {
+function TestScriptsTab({ projectId, project }) {
   const [scripts, setScripts] = useState([]);
   const [modules, setModules] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -334,9 +334,13 @@ function TestScriptsTab({ projectId }) {
           </label>
           <Link
             to={`/projects/${projectId}/generate`}
-            className="px-4 py-2.5 bg-purple-600 text-white text-sm font-medium rounded-lg hover:bg-purple-700 transition-colors"
+            className={`px-4 py-2.5 text-white text-sm font-medium rounded-lg transition-colors ${
+              project.generated_at
+                ? 'bg-amber-600 hover:bg-amber-700'
+                : 'bg-purple-600 hover:bg-purple-700'
+            }`}
           >
-            Generate with AI
+            {project.generated_at ? 'Regenerate with AI' : 'Generate with AI'}
           </Link>
           <Link
             to={`/projects/${projectId}/test-scripts/new`}
@@ -765,7 +769,7 @@ export default function ProjectDetail() {
         />
       )}
       {activeTab === 'test-scripts' && (
-        <TestScriptsTab projectId={id} />
+        <TestScriptsTab projectId={id} project={project} />
       )}
       {activeTab === 'bugs' && (
         <BugsTab projectId={id} />

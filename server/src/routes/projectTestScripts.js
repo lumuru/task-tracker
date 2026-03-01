@@ -247,6 +247,21 @@ router.patch('/bulk-status', (req, res) => {
   res.json({ updated: result.changes });
 });
 
+// DELETE /api/projects/:projectId/test-scripts/ai-generated — delete all AI-generated scripts
+router.delete('/ai-generated', (req, res) => {
+  const { projectId } = req.params;
+
+  if (!getProject(projectId)) {
+    return res.status(404).json({ error: 'Project not found' });
+  }
+
+  const result = db.prepare(
+    "DELETE FROM test_cases WHERE project_id = ? AND source = 'ai_generated'"
+  ).run(projectId);
+
+  res.json({ deleted: result.changes });
+});
+
 // DELETE /api/projects/:projectId/test-scripts/:id — delete test script
 router.delete('/:id', (req, res) => {
   const { projectId, id } = req.params;
@@ -308,8 +323,8 @@ router.post('/upload', upload.single('file'), (req, res) => {
     const VALID_STATUSES = ['draft', 'ready', 'deprecated'];
 
     const stmt = db.prepare(
-      `INSERT INTO test_cases (project_id, title, description, steps, expected_result, module, priority, status, created_by)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO test_cases (project_id, title, description, steps, expected_result, module, priority, status, created_by, source)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'imported')`
     );
 
     const inserted = [];
@@ -360,7 +375,7 @@ router.post('/upload', upload.single('file'), (req, res) => {
 // POST /api/projects/:projectId/test-scripts/batch — bulk import generated test scripts
 router.post('/batch', (req, res) => {
   const { projectId } = req.params;
-  const { scripts } = req.body;
+  const { scripts, source } = req.body;
 
   if (!scripts || !Array.isArray(scripts) || scripts.length === 0) {
     return res.status(400).json({ error: 'scripts array is required' });
@@ -371,9 +386,12 @@ router.post('/batch', (req, res) => {
     return res.status(404).json({ error: 'Project not found' });
   }
 
+  const validSources = ['manual', 'ai_generated', 'imported'];
+  const sourceValue = validSources.includes(source) ? source : 'manual';
+
   const stmt = db.prepare(`
-    INSERT INTO test_cases (title, module, description, preconditions, steps, expected_result, priority, status, project_id)
-    VALUES (?, ?, ?, ?, ?, ?, ?, 'draft', ?)
+    INSERT INTO test_cases (title, module, description, preconditions, steps, expected_result, priority, status, project_id, source)
+    VALUES (?, ?, ?, ?, ?, ?, ?, 'draft', ?, ?)
   `);
 
   let imported = 0;
@@ -388,8 +406,14 @@ router.post('/batch', (req, res) => {
       s.expected_result || null,
       s.priority || 'medium',
       projectId,
+      sourceValue,
     );
     imported++;
+  }
+
+  // Update generated_at timestamp if AI-generated
+  if (sourceValue === 'ai_generated' && imported > 0) {
+    db.prepare("UPDATE projects SET generated_at = datetime('now') WHERE id = ?").run(projectId);
   }
 
   res.json({ imported, total: scripts.length });

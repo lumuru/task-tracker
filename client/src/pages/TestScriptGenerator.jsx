@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { generateTestScripts, batchImportScripts } from '../api/generate';
+import { generateTestScripts, batchImportScripts, deleteAiGeneratedScripts } from '../api/generate';
+import { getProject } from '../api/projects';
 
 const ACCEPTED_TYPES = [
   'application/pdf',
@@ -364,20 +365,21 @@ export default function TestScriptGenerator() {
   const [scripts, setScripts] = useState([]);
   const [error, setError] = useState(null);
   const [importing, setImporting] = useState(false);
+  const [generatedAt, setGeneratedAt] = useState(null);
+  const [showRegenWarning, setShowRegenWarning] = useState(false);
+  const [pendingFile, setPendingFile] = useState(null);
 
-  const handleFileSelected = async (selectedFile) => {
-    setError(null);
+  useEffect(() => {
+    getProject(projectId).then((project) => {
+      if (project.generated_at) {
+        setGeneratedAt(project.generated_at);
+      }
+    }).catch(() => {});
+  }, [projectId]);
 
-    // Validate
-    if (!isValidFile(selectedFile)) {
-      setError('Unsupported file type. Please use PDF, DOCX, or XLSX.');
-      return;
-    }
-    if (selectedFile.size > MAX_FILE_SIZE) {
-      setError('File is too large. Maximum size is 10MB.');
-      return;
-    }
-
+  const proceedWithGeneration = async (selectedFile) => {
+    setShowRegenWarning(false);
+    setPendingFile(null);
     setFile(selectedFile);
     setPhase('processing');
 
@@ -392,13 +394,37 @@ export default function TestScriptGenerator() {
     }
   };
 
+  const handleFileSelected = async (selectedFile) => {
+    setError(null);
+
+    if (!isValidFile(selectedFile)) {
+      setError('Unsupported file type. Please use PDF, DOCX, or XLSX.');
+      return;
+    }
+    if (selectedFile.size > MAX_FILE_SIZE) {
+      setError('File is too large. Maximum size is 10MB.');
+      return;
+    }
+
+    if (generatedAt) {
+      setPendingFile(selectedFile);
+      setShowRegenWarning(true);
+      return;
+    }
+
+    proceedWithGeneration(selectedFile);
+  };
+
   const handleImport = async (selectedScripts) => {
     setImporting(true);
     setError(null);
     try {
-      const result = await batchImportScripts(projectId, selectedScripts);
+      // Delete old AI-generated scripts before importing new ones
+      if (generatedAt) {
+        await deleteAiGeneratedScripts(projectId);
+      }
+      const result = await batchImportScripts(projectId, selectedScripts, 'ai_generated');
       setPhase('done');
-      // Navigate back to project detail after short delay
       setTimeout(() => {
         navigate(`/projects/${projectId}`, { state: { importedCount: result.imported } });
       }, 1500);
@@ -423,6 +449,38 @@ export default function TestScriptGenerator() {
           Upload a requirements document and AI will generate test scripts for your project.
         </p>
       </div>
+
+      {showRegenWarning && (
+        <div className="max-w-2xl mx-auto mb-6 p-4 bg-amber-50 border border-amber-200 rounded-lg">
+          <div className="flex items-start gap-3">
+            <svg className="w-5 h-5 text-amber-600 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 6a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 6zm0 9a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" />
+            </svg>
+            <div>
+              <p className="text-sm font-medium text-amber-800">
+                AI scripts were previously generated on {new Date(generatedAt).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}.
+              </p>
+              <p className="text-sm text-amber-700 mt-1">
+                Regenerating will replace all AI-generated scripts. Manual and imported scripts are not affected.
+              </p>
+              <div className="mt-3 flex gap-2">
+                <button
+                  onClick={() => proceedWithGeneration(pendingFile)}
+                  className="px-4 py-2 bg-amber-600 text-white text-sm font-medium rounded-lg hover:bg-amber-700 transition-colors"
+                >
+                  Replace & Regenerate
+                </button>
+                <button
+                  onClick={() => { setShowRegenWarning(false); setPendingFile(null); }}
+                  className="px-4 py-2 bg-white text-gray-700 text-sm font-medium rounded-lg border border-gray-300 hover:bg-gray-50 transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {phase === 'upload' && (
         <UploadStep onFileSelected={handleFileSelected} error={error} />
