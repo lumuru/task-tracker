@@ -80,10 +80,20 @@ export default function ProjectTestScripts() {
     return 0;
   });
 
-  const sortIndicator = (key) => {
-    if (sortKey !== key) return ' \u2195';
-    return sortDir === 'asc' ? ' \u2191' : ' \u2193';
-  };
+  const SortIcon = ({ active, dir }) => (
+    <svg className={`inline w-3 h-3 ml-1 ${active ? 'text-blue-500' : 'text-gray-300'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      {!active ? (
+        <>
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 9l4-4 4 4" />
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 15l4 4 4-4" />
+        </>
+      ) : dir === 'asc' ? (
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+      ) : (
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+      )}
+    </svg>
+  );
 
   const filters = {
     module: searchParams.get('module') || '',
@@ -272,7 +282,7 @@ export default function ProjectTestScripts() {
                       onClick={() => handleSort(key)}
                       className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase cursor-pointer hover:text-gray-700 select-none"
                     >
-                      {label}{sortIndicator(key)}
+                      {label}<SortIcon active={sortKey === key} dir={sortDir} />
                     </th>
                   ))}
                   <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>

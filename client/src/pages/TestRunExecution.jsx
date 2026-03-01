@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Fragment } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { getTestRun, updateTestRunResults, getTestRunSummary } from '../api/testRuns';
 import { getMembers } from '../api/members';
@@ -31,6 +31,7 @@ export default function TestRunExecution() {
   const [error, setError] = useState(null);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [expandedId, setExpandedId] = useState(null);
 
   const fetchData = async () => {
     try {
@@ -47,7 +48,13 @@ export default function TestRunExecution() {
         priority: r.priority,
         status: r.status,
         notes: r.notes || '',
+        steps: r.steps || '',
+        preconditions: r.preconditions || '',
+        expected_result: r.expected_result || '',
+        description: r.description || '',
       })));
+      const savedExecutor = runData.results.find((r) => r.executed_by)?.executed_by;
+      if (savedExecutor) setExecutedBy(String(savedExecutor));
       setMembers(mems);
       setSummary(summ);
       setError(null);
@@ -179,47 +186,113 @@ export default function TestRunExecution() {
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-200">
-            {results.map((r, i) => (
-              <tr key={r.test_case_id} className="hover:bg-gray-50">
-                <td className="px-4 py-3 text-sm text-gray-400">{i + 1}</td>
-                <td className="px-4 py-3">
-                  <Link to={`/test-cases/${r.test_case_id}`} className="text-sm text-blue-600 hover:text-blue-800 font-medium">
-                    {r.title}
-                  </Link>
-                </td>
-                <td className="px-4 py-3 text-sm text-gray-500">{r.module || '—'}</td>
-                <td className="px-4 py-3">
-                  <select
-                    value={r.status}
-                    onChange={(e) => updateResult(i, 'status', e.target.value)}
-                    className={`px-2 py-1 text-xs font-medium rounded border-0 ${statusStyles[r.status]}`}
-                  >
-                    {RESULT_OPTIONS.map((opt) => (
-                      <option key={opt} value={opt}>{opt.charAt(0).toUpperCase() + opt.slice(1)}</option>
-                    ))}
-                  </select>
-                </td>
-                <td className="px-4 py-3">
-                  <input
-                    type="text"
-                    value={r.notes}
-                    onChange={(e) => updateResult(i, 'notes', e.target.value)}
-                    placeholder="Add notes..."
-                    className="w-full px-2 py-1 text-sm border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
-                  />
-                </td>
-                <td className="px-4 py-3 text-right">
-                  {r.status === 'fail' && (
-                    <Link
-                      to={`/bugs/new?test_case_id=${r.test_case_id}`}
-                      className="text-xs text-orange-600 hover:text-orange-800 font-medium whitespace-nowrap"
-                    >
-                      File Bug
-                    </Link>
+            {results.map((r, i) => {
+              const isExpanded = expandedId === r.test_case_id;
+              const hasDetails = r.steps || r.preconditions || r.expected_result || r.description;
+              return (
+                <Fragment key={r.test_case_id}>
+                  <tr className={`hover:bg-gray-50 ${isExpanded ? 'bg-blue-50/50' : ''}`}>
+                    <td className="px-4 py-3 text-sm text-gray-400">{i + 1}</td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => setExpandedId(isExpanded ? null : r.test_case_id)}
+                          className="text-gray-400 hover:text-gray-600 flex-shrink-0"
+                          title={isExpanded ? 'Collapse' : 'Show test steps'}
+                        >
+                          <svg className={`w-4 h-4 transition-transform ${isExpanded ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                          </svg>
+                        </button>
+                        <button
+                          onClick={() => setExpandedId(isExpanded ? null : r.test_case_id)}
+                          className="text-sm text-blue-600 hover:text-blue-800 font-medium text-left"
+                        >
+                          {r.title}
+                        </button>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-sm text-gray-500">{r.module || '—'}</td>
+                    <td className="px-4 py-3">
+                      <select
+                        value={r.status}
+                        onChange={(e) => updateResult(i, 'status', e.target.value)}
+                        className={`px-2 py-1 text-xs font-medium rounded border-0 ${statusStyles[r.status]}`}
+                      >
+                        {RESULT_OPTIONS.map((opt) => (
+                          <option key={opt} value={opt}>{opt.charAt(0).toUpperCase() + opt.slice(1)}</option>
+                        ))}
+                      </select>
+                    </td>
+                    <td className="px-4 py-3">
+                      <input
+                        type="text"
+                        value={r.notes}
+                        onChange={(e) => updateResult(i, 'notes', e.target.value)}
+                        placeholder="Add notes..."
+                        className="w-full px-2 py-1 text-sm border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      />
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      {r.status === 'fail' && (
+                        <Link
+                          to={`/bugs/new?test_case_id=${r.test_case_id}`}
+                          className="text-xs text-orange-600 hover:text-orange-800 font-medium whitespace-nowrap"
+                        >
+                          File Bug
+                        </Link>
+                      )}
+                    </td>
+                  </tr>
+                  {isExpanded && (
+                    <tr>
+                      <td colSpan={6} className="px-0 py-0">
+                        <div className="px-6 py-4 bg-blue-50/70 border-t border-b border-blue-100">
+                          {!hasDetails ? (
+                            <p className="text-sm text-gray-400 italic">No steps defined for this test case.</p>
+                          ) : (
+                            <div className="grid gap-3 text-sm">
+                              {r.preconditions && (
+                                <div>
+                                  <h4 className="font-semibold text-gray-700 mb-1">Preconditions</h4>
+                                  <p className="text-gray-600 whitespace-pre-line">{r.preconditions}</p>
+                                </div>
+                              )}
+                              {r.steps && (
+                                <div>
+                                  <h4 className="font-semibold text-gray-700 mb-1">Steps</h4>
+                                  {r.steps.includes('\n') ? (
+                                    <ol className="list-decimal list-inside text-gray-600 space-y-1">
+                                      {r.steps.split('\n').filter(Boolean).map((step, si) => (
+                                        <li key={si}>{step.replace(/^\d+[\.\)]\s*/, '')}</li>
+                                      ))}
+                                    </ol>
+                                  ) : (
+                                    <p className="text-gray-600">{r.steps}</p>
+                                  )}
+                                </div>
+                              )}
+                              {r.expected_result && (
+                                <div>
+                                  <h4 className="font-semibold text-gray-700 mb-1">Expected Result</h4>
+                                  <p className="text-gray-600 whitespace-pre-line">{r.expected_result}</p>
+                                </div>
+                              )}
+                              {!r.steps && r.description && (
+                                <div>
+                                  <h4 className="font-semibold text-gray-700 mb-1">Description</h4>
+                                  <p className="text-gray-600 whitespace-pre-line">{r.description}</p>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
                   )}
-                </td>
-              </tr>
-            ))}
+                </Fragment>
+              );
+            })}
           </tbody>
         </table>
       </div>

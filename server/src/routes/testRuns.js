@@ -35,6 +35,7 @@ router.get('/:id', (req, res) => {
 
   const results = db.prepare(`
     SELECT r.*, tc.title as test_case_title, tc.module, tc.priority,
+           tc.steps, tc.preconditions, tc.expected_result, tc.description,
            tm.name as executed_by_name
     FROM test_results r
     JOIN test_cases tc ON r.test_case_id = tc.id
