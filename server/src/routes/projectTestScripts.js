@@ -290,19 +290,58 @@ router.post('/upload', upload.single('file'), (req, res) => {
 
   try {
     const workbook = XLSX.read(req.file.buffer, { type: 'buffer' });
-    const sheetName = workbook.SheetNames[0];
+
+    // Find the best sheet: prefer one named "Test Script(s)" or similar, else first sheet
+    const TEST_SHEET_PATTERN = /test.*(script|case)/i;
+    const sheetName = workbook.SheetNames.find(s => TEST_SHEET_PATTERN.test(s)) || workbook.SheetNames[0];
     if (!sheetName) {
       return res.status(400).json({ error: 'Excel file has no sheets' });
     }
 
-    const rows = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName]);
+    const sheet = workbook.Sheets[sheetName];
+    const sheetRange = XLSX.utils.decode_range(sheet['!ref']);
+
+    // Auto-detect header row by scanning actual cells for known header patterns
+    // A header row must have at least 2 matches from these keywords
+    const HEADER_KEYWORDS = ['test case', 'test scenario', 'test steps', 'expected result', 'title', 'module', 'steps', 'input data'];
+    let headerRowIndex = 0;
+    for (let r = 0; r <= Math.min(sheetRange.e.r, 30); r++) {
+      const cellValues = [];
+      for (let c = 0; c <= sheetRange.e.c; c++) {
+        const addr = XLSX.utils.encode_cell({ r, c });
+        if (sheet[addr]) cellValues.push((sheet[addr].v || '').toString().toLowerCase().trim());
+      }
+      const matchCount = cellValues.filter(v => HEADER_KEYWORDS.some(kw => v === kw || v.startsWith(kw + ' ') || v.startsWith(kw + '#'))).length;
+      if (matchCount >= 2) {
+        headerRowIndex = r;
+        break;
+      }
+    }
+
+    // Re-parse with detected header row
+    const rows = XLSX.utils.sheet_to_json(sheet, { range: headerRowIndex });
+    console.log('[Upload] Sheet:', sheetName, '| Header row:', headerRowIndex + 1, '| Data rows:', rows.length,
+      '| Columns:', rows.length > 0 ? Object.keys(rows[0]) : 'none');
     if (rows.length === 0) {
       return res.status(400).json({ error: 'Sheet is empty' });
     }
 
-    const normalize = (key) => key.trim().toLowerCase().replace(/\s+/g, '_');
+    const normalize = (key) => key.trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
     const VALID_PRIORITIES = ['critical', 'high', 'medium', 'low'];
     const VALID_STATUSES = ['draft', 'ready', 'deprecated'];
+
+    // Map normalized column names to canonical field names
+    const FIELD_ALIASES = {
+      title: 'title', test_case: 'title',
+      module: 'module', test_scenario: 'module',
+      steps: 'steps', test_steps: 'steps',
+      expected_result: 'expected_result',
+      description: 'description',
+      priority: 'priority',
+      status: 'status',
+      input_data: 'input_data',
+      preconditions: 'preconditions',
+    };
 
     const stmt = db.prepare(
       `INSERT INTO test_cases (project_id, title, description, steps, expected_result, module, priority, status, created_by, source)
@@ -315,7 +354,11 @@ router.post('/upload', upload.single('file'), (req, res) => {
     const insertAll = db.transaction(() => {
       rows.forEach((raw, i) => {
         const row = {};
-        Object.entries(raw).forEach(([k, v]) => { row[normalize(k)] = v; });
+        Object.entries(raw).forEach(([k, v]) => {
+          const normalized = normalize(k);
+          const field = FIELD_ALIASES[normalized] || normalized;
+          if (!row[field]) row[field] = v;
+        });
 
         const title = (row.title || '').toString().trim();
         if (!title) {
