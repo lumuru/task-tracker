@@ -158,7 +158,7 @@ router.get('/:id/export', (req, res) => {
 
   const results = db.prepare(`
     SELECT r.*, tc.id as tc_id, tc.title, tc.module, tc.steps, tc.expected_result,
-           tm.name as executed_by_name
+           tc.preconditions, tm.name as executed_by_name
     FROM test_results r
     JOIN test_cases tc ON r.test_case_id = tc.id
     LEFT JOIN team_members tm ON r.executed_by = tm.id
@@ -166,30 +166,32 @@ router.get('/:id/export', (req, res) => {
     ORDER BY tc.module, tc.title
   `).all(req.params.id);
 
-  const rows = results.map(r => ({
-    'Test Case ID': r.tc_id,
-    'Module': r.module || '',
-    'Test Case Title': r.title,
-    'Steps': r.steps || '',
-    'Expected Result': r.expected_result || '',
-    'Status': r.status || '',
-    'Notes': r.notes || '',
-    'Executed By': r.executed_by_name || '',
-    'Executed At': r.executed_at || '',
+  const rows = results.map((r, i) => ({
+    'TEST CASE ID#': `TC-${String(i + 1).padStart(3, '0')}`,
+    'TEST SCENARIO': r.module || '',
+    'TEST CASE': r.title,
+    'TEST STEPS': r.steps || '',
+    'INPUT DATA': r.preconditions || '',
+    'EXPECTED RESULT': r.expected_result || '',
+    'STATUS': (r.status || '').toUpperCase(),
+    'NOTES': r.notes || '',
+    'EXECUTED BY': r.executed_by_name || '',
+    'EXECUTED AT': r.executed_at || '',
   }));
 
   const worksheet = XLSX.utils.json_to_sheet(rows);
 
   worksheet['!cols'] = [
-    { wch: 12 },  // Test Case ID
-    { wch: 20 },  // Module
-    { wch: 35 },  // Test Case Title
-    { wch: 45 },  // Steps
-    { wch: 35 },  // Expected Result
-    { wch: 10 },  // Status
-    { wch: 30 },  // Notes
-    { wch: 18 },  // Executed By
-    { wch: 20 },  // Executed At
+    { wch: 14 },  // TEST CASE ID#
+    { wch: 25 },  // TEST SCENARIO
+    { wch: 35 },  // TEST CASE
+    { wch: 45 },  // TEST STEPS
+    { wch: 25 },  // INPUT DATA
+    { wch: 35 },  // EXPECTED RESULT
+    { wch: 10 },  // STATUS
+    { wch: 30 },  // NOTES
+    { wch: 18 },  // EXECUTED BY
+    { wch: 20 },  // EXECUTED AT
   ];
 
   const workbook = XLSX.utils.book_new();
