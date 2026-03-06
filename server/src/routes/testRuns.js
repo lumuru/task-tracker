@@ -35,14 +35,22 @@ router.get('/:id', (req, res) => {
   }
 
   const results = db.prepare(`
-    SELECT r.*, tc.title as test_case_title, tc.module, tc.priority,
-           tc.steps, tc.preconditions, tc.expected_result, tc.description,
+    SELECT r.*, r.actual_result,
+           r.override_steps, r.override_expected_result, r.override_preconditions,
+           tc.title as test_case_title, tc.module, tc.priority,
+           COALESCE(r.override_steps, tc.steps) as steps,
+           COALESCE(r.override_preconditions, tc.preconditions) as preconditions,
+           COALESCE(r.override_expected_result, tc.expected_result) as expected_result,
+           tc.steps as original_steps,
+           tc.preconditions as original_preconditions,
+           tc.expected_result as original_expected_result,
+           tc.description,
            tm.name as executed_by_name
     FROM test_results r
     JOIN test_cases tc ON r.test_case_id = tc.id
     LEFT JOIN team_members tm ON r.executed_by = tm.id
     WHERE r.test_run_id = ?
-    ORDER BY tc.module, tc.title
+    ORDER BY tc.id
   `).all(req.params.id);
 
   res.json({ ...run, results });
@@ -98,7 +106,9 @@ router.put('/:id/results', (req, res) => {
   const update = db.transaction(() => {
     const stmt = db.prepare(`
       UPDATE test_results
-      SET status = ?, notes = ?, executed_by = ?, executed_at = datetime('now')
+      SET status = ?, notes = ?, actual_result = ?,
+          override_steps = ?, override_expected_result = ?, override_preconditions = ?,
+          executed_by = ?, executed_at = datetime('now')
       WHERE test_run_id = ? AND test_case_id = ?
     `);
 
@@ -106,6 +116,10 @@ router.put('/:id/results', (req, res) => {
       stmt.run(
         r.status || 'pending',
         r.notes || null,
+        r.actual_result || null,
+        r.override_steps || null,
+        r.override_expected_result || null,
+        r.override_preconditions || null,
         executed_by || null,
         id,
         r.test_case_id
@@ -157,26 +171,38 @@ router.get('/:id/export', (req, res) => {
   }
 
   const results = db.prepare(`
-    SELECT r.*, tc.id as tc_id, tc.title, tc.module, tc.steps, tc.expected_result,
-           tc.preconditions, tm.name as executed_by_name
+    SELECT r.*, r.actual_result, tc.id as tc_id, tc.title, tc.module,
+           COALESCE(r.override_steps, tc.steps) as steps,
+           COALESCE(r.override_expected_result, tc.expected_result) as expected_result,
+           COALESCE(r.override_preconditions, tc.preconditions) as preconditions,
+           tm.name as executed_by_name
     FROM test_results r
     JOIN test_cases tc ON r.test_case_id = tc.id
     LEFT JOIN team_members tm ON r.executed_by = tm.id
     WHERE r.test_run_id = ?
-    ORDER BY tc.module, tc.title
+    ORDER BY tc.id
   `).all(req.params.id);
 
+  const statusLabel = (s) => {
+    if (s === 'pass') return 'Passed';
+    if (s === 'fail') return 'Failed';
+    if (s === 'blocked') return 'Blocked';
+    if (s === 'skipped') return 'Skipped';
+    return 'Not Started';
+  };
+
   const rows = results.map((r, i) => ({
-    'TEST CASE ID#': `TC-${String(i + 1).padStart(3, '0')}`,
+    'TEST CASE ID#': `TC${String(i + 1).padStart(2, '0')}`,
     'TEST SCENARIO': r.module || '',
     'TEST CASE': r.title,
     'TEST STEPS': r.steps || '',
-    'INPUT DATA': r.preconditions || '',
     'EXPECTED RESULT': r.expected_result || '',
-    'STATUS': (r.status || '').toUpperCase(),
-    'NOTES': r.notes || '',
-    'EXECUTED BY': r.executed_by_name || '',
-    'EXECUTED AT': r.executed_at || '',
+    'ACTUAL RESULT': r.actual_result || '',
+    'TESTER': r.executed_by_name || '',
+    'TEST DATE': r.executed_at || '',
+    'EXECUTED?': r.status !== 'pending' ? 'Yes' : 'No',
+    'RESULT': statusLabel(r.status),
+    'REMARKS': r.notes || '',
   }));
 
   const worksheet = XLSX.utils.json_to_sheet(rows);
@@ -186,12 +212,13 @@ router.get('/:id/export', (req, res) => {
     { wch: 25 },  // TEST SCENARIO
     { wch: 35 },  // TEST CASE
     { wch: 45 },  // TEST STEPS
-    { wch: 25 },  // INPUT DATA
     { wch: 35 },  // EXPECTED RESULT
-    { wch: 10 },  // STATUS
-    { wch: 30 },  // NOTES
-    { wch: 18 },  // EXECUTED BY
-    { wch: 20 },  // EXECUTED AT
+    { wch: 30 },  // ACTUAL RESULT
+    { wch: 18 },  // TESTER
+    { wch: 14 },  // TEST DATE
+    { wch: 12 },  // EXECUTED?
+    { wch: 12 },  // RESULT
+    { wch: 25 },  // REMARKS
   ];
 
   const workbook = XLSX.utils.book_new();

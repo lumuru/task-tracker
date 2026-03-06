@@ -173,6 +173,13 @@ if (!projCols.some(c => c.name === 'generated_at')) {
   db.exec("ALTER TABLE projects ADD COLUMN generated_at TEXT DEFAULT NULL");
 }
 
+// Migration: add parent_id column to projects for sub-project hierarchy
+const projColsParent = db.prepare("PRAGMA table_info(projects)").all();
+if (!projColsParent.some(c => c.name === 'parent_id')) {
+  db.exec("ALTER TABLE projects ADD COLUMN parent_id INTEGER REFERENCES projects(id)");
+  db.exec("CREATE INDEX IF NOT EXISTS idx_projects_parent_id ON projects(parent_id)");
+}
+
 // One-time backfill: tag existing batch-imported scripts as ai_generated
 // Scripts created without a created_by but with a project_id were batch-imported via AI generation
 const backfillDone = db.prepare("SELECT 1 FROM app_settings WHERE key = 'backfill_ai_source_done'").get();
@@ -221,6 +228,18 @@ db.exec(`
     created_at TEXT DEFAULT (datetime('now'))
   )
 `);
+
+// Migration: add actual_result and override columns to test_results
+const trCols = db.prepare("PRAGMA table_info(test_results)").all();
+const trColNames = trCols.map(c => c.name);
+if (!trColNames.includes('actual_result')) {
+  db.exec("ALTER TABLE test_results ADD COLUMN actual_result TEXT");
+}
+if (!trColNames.includes('override_steps')) {
+  db.exec("ALTER TABLE test_results ADD COLUMN override_steps TEXT");
+  db.exec("ALTER TABLE test_results ADD COLUMN override_expected_result TEXT");
+  db.exec("ALTER TABLE test_results ADD COLUMN override_preconditions TEXT");
+}
 
 // Seed default settings from env vars if not already present
 const seedSetting = db.prepare(
