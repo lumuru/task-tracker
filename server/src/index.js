@@ -46,6 +46,11 @@ app.use('/api', (err, req, res, next) => {
   res.status(500).json({ error: err.message || 'Internal server error' });
 });
 
+// Return 404 JSON for any unmatched API routes (before SPA catch-all)
+app.use('/api', (req, res) => {
+  res.status(404).json({ error: 'API endpoint not found' });
+});
+
 // Serve built React frontend in production
 const clientDistPath = path.join(__dirname, '../../client/dist');
 if (fs.existsSync(clientDistPath)) {

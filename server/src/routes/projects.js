@@ -216,6 +216,8 @@ router.delete('/:id', (req, res) => {
     db.prepare('DELETE FROM bugs WHERE project_id = ?').run(id);
     // Delete test cases
     db.prepare('DELETE FROM test_cases WHERE project_id = ?').run(id);
+    // Nullify project_id on test runs (keep runs but unlink from project)
+    db.prepare('UPDATE test_runs SET project_id = NULL WHERE project_id = ?').run(id);
     // Delete project members
     db.prepare('DELETE FROM project_members WHERE project_id = ?').run(id);
     // Delete AI generation logs
