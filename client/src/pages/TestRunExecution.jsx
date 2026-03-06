@@ -37,6 +37,7 @@ export default function TestRunExecution() {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [expandedId, setExpandedId] = useState(null);
+  const [editingId, setEditingId] = useState(null);
   const [exporting, setExporting] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
   const [showSavePrompt, setShowSavePrompt] = useState(false);
@@ -120,10 +121,17 @@ export default function TestRunExecution() {
         priority: r.priority,
         status: r.status,
         notes: r.notes || '',
+        actual_result: r.actual_result || '',
         steps: r.steps || '',
         preconditions: r.preconditions || '',
         expected_result: r.expected_result || '',
         description: r.description || '',
+        override_steps: r.override_steps || null,
+        override_expected_result: r.override_expected_result || null,
+        override_preconditions: r.override_preconditions || null,
+        original_steps: r.original_steps || '',
+        original_preconditions: r.original_preconditions || '',
+        original_expected_result: r.original_expected_result || '',
       })));
       const savedExecutor = runData.results.find((r) => r.executed_by)?.executed_by;
       if (savedExecutor) setExecutedBy(String(savedExecutor));
@@ -210,6 +218,10 @@ export default function TestRunExecution() {
           test_case_id: r.test_case_id,
           status: r.status,
           notes: r.notes,
+          actual_result: r.actual_result,
+          override_steps: r.override_steps,
+          override_expected_result: r.override_expected_result,
+          override_preconditions: r.override_preconditions,
         })),
       });
       const summ = await getTestRunSummary(id);
@@ -329,6 +341,7 @@ export default function TestRunExecution() {
               <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Test Case</th>
               <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Module</th>
               <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase w-36">Result</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actual Result</th>
               <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Notes</th>
               <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase w-20"></th>
             </tr>
@@ -344,7 +357,7 @@ export default function TestRunExecution() {
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
                         <button
-                          onClick={() => setExpandedId(isExpanded ? null : r.test_case_id)}
+                          onClick={() => { setExpandedId(isExpanded ? null : r.test_case_id); if (isExpanded) setEditingId(null); }}
                           className="text-gray-400 hover:text-gray-600 flex-shrink-0"
                           title={isExpanded ? 'Collapse' : 'Show test steps'}
                         >
@@ -353,7 +366,7 @@ export default function TestRunExecution() {
                           </svg>
                         </button>
                         <button
-                          onClick={() => setExpandedId(isExpanded ? null : r.test_case_id)}
+                          onClick={() => { setExpandedId(isExpanded ? null : r.test_case_id); if (isExpanded) setEditingId(null); }}
                           className="text-sm text-blue-600 hover:text-blue-800 font-medium text-left"
                         >
                           {r.title}
@@ -371,6 +384,15 @@ export default function TestRunExecution() {
                           <option key={opt} value={opt}>{opt.charAt(0).toUpperCase() + opt.slice(1)}</option>
                         ))}
                       </select>
+                    </td>
+                    <td className="px-4 py-3">
+                      <input
+                        type="text"
+                        value={r.actual_result}
+                        onChange={(e) => updateResult(i, 'actual_result', e.target.value)}
+                        placeholder="Actual result..."
+                        className="w-full px-2 py-1 text-sm border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      />
                     </td>
                     <td className="px-4 py-3">
                       <input
@@ -404,42 +426,143 @@ export default function TestRunExecution() {
                   </tr>
                   {isExpanded && (
                     <tr>
-                      <td colSpan={6} className="px-0 py-0">
+                      <td colSpan={7} className="px-0 py-0">
                         <div className="px-6 py-4 bg-blue-50/70 border-t border-b border-blue-100">
-                          {!hasDetails ? (
-                            <p className="text-sm text-gray-400 italic">No steps defined for this test case.</p>
-                          ) : (
+                          {editingId === r.test_case_id ? (
+                            /* ── Edit mode ── */
                             <div className="grid gap-3 text-sm">
-                              {r.preconditions && (
+                              {(r.preconditions || r.original_preconditions) ? (
                                 <div>
-                                  <h4 className="font-semibold text-gray-700 mb-1">Preconditions</h4>
-                                  <p className="text-gray-600 whitespace-pre-line">{r.preconditions}</p>
+                                  <div className="flex items-center gap-2 mb-1">
+                                    <h4 className="font-semibold text-gray-700">Preconditions</h4>
+                                    {r.override_preconditions !== null && (
+                                      <button
+                                        onClick={() => { updateResult(i, 'override_preconditions', null); updateResult(i, 'preconditions', r.original_preconditions); }}
+                                        className="text-xs text-blue-600 hover:text-blue-800"
+                                        title="Revert to original"
+                                      >reset</button>
+                                    )}
+                                  </div>
+                                  <textarea
+                                    value={r.preconditions}
+                                    onChange={(e) => { updateResult(i, 'preconditions', e.target.value); updateResult(i, 'override_preconditions', e.target.value); }}
+                                    rows={2}
+                                    className={`w-full px-3 py-2 border rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 ${r.override_preconditions !== null ? 'border-amber-300 bg-amber-50/50' : 'border-gray-200 bg-white'}`}
+                                  />
                                 </div>
-                              )}
-                              {r.steps && (
-                                <div>
-                                  <h4 className="font-semibold text-gray-700 mb-1">Steps</h4>
-                                  {r.steps.includes('\n') ? (
-                                    <ol className="list-decimal list-inside text-gray-600 space-y-1">
-                                      {r.steps.split('\n').filter(Boolean).map((step, si) => (
-                                        <li key={si}>{step.replace(/^\d+[\.\)]\s*/, '')}</li>
-                                      ))}
-                                    </ol>
-                                  ) : (
-                                    <p className="text-gray-600">{r.steps}</p>
+                              ) : null}
+                              <div>
+                                <div className="flex items-center gap-2 mb-1">
+                                  <h4 className="font-semibold text-gray-700">Steps</h4>
+                                  {r.override_steps !== null && (
+                                    <button
+                                      onClick={() => { updateResult(i, 'override_steps', null); updateResult(i, 'steps', r.original_steps); }}
+                                      className="text-xs text-blue-600 hover:text-blue-800"
+                                      title="Revert to original"
+                                    >reset</button>
                                   )}
                                 </div>
-                              )}
-                              {r.expected_result && (
-                                <div>
-                                  <h4 className="font-semibold text-gray-700 mb-1">Expected Result</h4>
-                                  <p className="text-gray-600 whitespace-pre-line">{r.expected_result}</p>
+                                <textarea
+                                  value={r.steps}
+                                  onChange={(e) => { updateResult(i, 'steps', e.target.value); updateResult(i, 'override_steps', e.target.value); }}
+                                  rows={Math.max(3, (r.steps || '').split('\n').length)}
+                                  placeholder="Enter test steps..."
+                                  className={`w-full px-3 py-2 border rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 ${r.override_steps !== null ? 'border-amber-300 bg-amber-50/50' : 'border-gray-200 bg-white'}`}
+                                />
+                              </div>
+                              <div>
+                                <div className="flex items-center gap-2 mb-1">
+                                  <h4 className="font-semibold text-gray-700">Expected Result</h4>
+                                  {r.override_expected_result !== null && (
+                                    <button
+                                      onClick={() => { updateResult(i, 'override_expected_result', null); updateResult(i, 'expected_result', r.original_expected_result); }}
+                                      className="text-xs text-blue-600 hover:text-blue-800"
+                                      title="Revert to original"
+                                    >reset</button>
+                                  )}
                                 </div>
-                              )}
+                                <textarea
+                                  value={r.expected_result}
+                                  onChange={(e) => { updateResult(i, 'expected_result', e.target.value); updateResult(i, 'override_expected_result', e.target.value); }}
+                                  rows={2}
+                                  placeholder="Enter expected result..."
+                                  className={`w-full px-3 py-2 border rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 ${r.override_expected_result !== null ? 'border-amber-300 bg-amber-50/50' : 'border-gray-200 bg-white'}`}
+                                />
+                              </div>
                               {!r.steps && r.description && (
                                 <div>
                                   <h4 className="font-semibold text-gray-700 mb-1">Description</h4>
                                   <p className="text-gray-600 whitespace-pre-line">{r.description}</p>
+                                </div>
+                              )}
+                              <div className="flex justify-end">
+                                <button
+                                  onClick={() => setEditingId(null)}
+                                  className="px-3 py-1.5 text-xs font-medium text-blue-700 bg-blue-100 rounded-md hover:bg-blue-200 transition-colors"
+                                >
+                                  Done Editing
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                            /* ── Read-only mode ── */
+                            <div>
+                              <div className="flex justify-end mb-2">
+                                <button
+                                  onClick={() => setEditingId(r.test_case_id)}
+                                  className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-gray-600 bg-white border border-gray-300 rounded-md hover:bg-gray-50 hover:text-gray-800 transition-colors"
+                                >
+                                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                                  </svg>
+                                  Edit
+                                </button>
+                              </div>
+                              {!(r.steps || r.preconditions || r.expected_result || r.description) ? (
+                                <p className="text-sm text-gray-400 italic">No steps defined for this test case.</p>
+                              ) : (
+                                <div className="grid gap-3 text-sm">
+                                  {r.preconditions && (
+                                    <div>
+                                      <h4 className="font-semibold text-gray-700 mb-1">
+                                        Preconditions
+                                        {r.override_preconditions !== null && <span className="ml-1.5 text-xs font-normal text-amber-600">(edited)</span>}
+                                      </h4>
+                                      <p className="text-gray-600 whitespace-pre-line">{r.preconditions}</p>
+                                    </div>
+                                  )}
+                                  {r.steps && (
+                                    <div>
+                                      <h4 className="font-semibold text-gray-700 mb-1">
+                                        Steps
+                                        {r.override_steps !== null && <span className="ml-1.5 text-xs font-normal text-amber-600">(edited)</span>}
+                                      </h4>
+                                      {r.steps.includes('\n') ? (
+                                        <ol className="list-decimal list-inside text-gray-600 space-y-1">
+                                          {r.steps.split('\n').filter(Boolean).map((step, si) => (
+                                            <li key={si}>{step.replace(/^\d+[\.\)]\s*/, '')}</li>
+                                          ))}
+                                        </ol>
+                                      ) : (
+                                        <p className="text-gray-600">{r.steps}</p>
+                                      )}
+                                    </div>
+                                  )}
+                                  {r.expected_result && (
+                                    <div>
+                                      <h4 className="font-semibold text-gray-700 mb-1">
+                                        Expected Result
+                                        {r.override_expected_result !== null && <span className="ml-1.5 text-xs font-normal text-amber-600">(edited)</span>}
+                                      </h4>
+                                      <p className="text-gray-600 whitespace-pre-line">{r.expected_result}</p>
+                                    </div>
+                                  )}
+                                  {!r.steps && r.description && (
+                                    <div>
+                                      <h4 className="font-semibold text-gray-700 mb-1">Description</h4>
+                                      <p className="text-gray-600 whitespace-pre-line">{r.description}</p>
+                                    </div>
+                                  )}
                                 </div>
                               )}
                             </div>
