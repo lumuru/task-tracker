@@ -10,7 +10,9 @@ router.get('/', (req, res) => {
     SELECT p.*,
       (SELECT COUNT(*) FROM project_members WHERE project_id = p.id) AS member_count,
       (SELECT COUNT(*) FROM test_cases WHERE project_id = p.id) AS test_script_count,
-      (SELECT name FROM team_members WHERE id = p.created_by) AS created_by_name
+      (SELECT name FROM team_members WHERE id = p.created_by) AS created_by_name,
+      (SELECT name FROM projects WHERE id = p.parent_id) AS parent_name,
+      (SELECT COUNT(*) FROM projects c WHERE c.parent_id = p.id) AS sub_project_count
     FROM projects p
   `;
   const params = [];
@@ -30,7 +32,8 @@ router.get('/:id', (req, res) => {
   const project = db.prepare(`
     SELECT p.*,
       (SELECT COUNT(*) FROM test_cases WHERE project_id = p.id) AS test_script_count,
-      (SELECT name FROM team_members WHERE id = p.created_by) AS created_by_name
+      (SELECT name FROM team_members WHERE id = p.created_by) AS created_by_name,
+      (SELECT name FROM projects WHERE id = p.parent_id) AS parent_name
     FROM projects p WHERE p.id = ?
   `).get(id);
 
@@ -78,21 +81,42 @@ router.get('/:id', (req, res) => {
     latestPassRate = executed > 0 ? Math.round((rc.passed / executed) * 100) : null;
   }
 
-  res.json({ ...project, members, open_defects: openDefects, latest_pass_rate: latestPassRate });
+  // Sub-projects for this project
+  const subProjects = db.prepare(`
+    SELECT p.*,
+      (SELECT COUNT(*) FROM test_cases WHERE project_id = p.id) AS test_script_count,
+      (SELECT COUNT(*) FROM project_members WHERE project_id = p.id) AS member_count
+    FROM projects p
+    WHERE p.parent_id = ?
+    ORDER BY p.name
+  `).all(id);
+
+  res.json({ ...project, members, open_defects: openDefects, latest_pass_rate: latestPassRate, sub_projects: subProjects });
 });
 
 // POST /api/projects — create project
 router.post('/', (req, res) => {
-  const { name, description, status, priority, created_by, member_ids } = req.body;
+  const { name, description, status, priority, created_by, member_ids, parent_id } = req.body;
 
   if (!name || !name.trim()) {
     return res.status(400).json({ error: 'Name is required' });
   }
 
+  // Validate parent_id if provided
+  if (parent_id) {
+    const parent = db.prepare('SELECT id, parent_id FROM projects WHERE id = ?').get(parent_id);
+    if (!parent) {
+      return res.status(400).json({ error: 'Parent project not found' });
+    }
+    if (parent.parent_id) {
+      return res.status(400).json({ error: 'Cannot nest under a sub-project. Only one level of nesting is allowed.' });
+    }
+  }
+
   const stmt = db.prepare(
-    'INSERT INTO projects (name, description, status, priority, created_by) VALUES (?, ?, ?, ?, ?)'
+    'INSERT INTO projects (name, description, status, priority, created_by, parent_id) VALUES (?, ?, ?, ?, ?, ?)'
   );
-  const result = stmt.run(name.trim(), description || null, status || 'active', priority || 'medium', created_by || null);
+  const result = stmt.run(name.trim(), description || null, status || 'active', priority || 'medium', created_by || null, parent_id || null);
   const projectId = result.lastInsertRowid;
 
   if (member_ids && member_ids.length > 0) {
@@ -130,7 +154,35 @@ router.put('/:id', (req, res) => {
   res.json(project);
 });
 
-// DELETE /api/projects/:id — delete project (only if no test scripts exist)
+// GET /api/projects/:id/delete-summary — preview what will be deleted
+router.get('/:id/delete-summary', (req, res) => {
+  const { id } = req.params;
+
+  const existing = db.prepare('SELECT * FROM projects WHERE id = ?').get(id);
+  if (!existing) {
+    return res.status(404).json({ error: 'Project not found' });
+  }
+
+  const testScripts = db.prepare('SELECT COUNT(*) as count FROM test_cases WHERE project_id = ?').get(id).count;
+  const testCaseIds = db.prepare('SELECT id FROM test_cases WHERE project_id = ?').all(id).map(r => r.id);
+
+  let testResults = 0;
+  let bugs = 0;
+  if (testCaseIds.length > 0) {
+    const placeholders = testCaseIds.map(() => '?').join(',');
+    testResults = db.prepare(`SELECT COUNT(*) as count FROM test_results WHERE test_case_id IN (${placeholders})`).get(...testCaseIds).count;
+    bugs = db.prepare(`SELECT COUNT(*) as count FROM bugs WHERE project_id = ? OR test_case_id IN (${placeholders})`).get(id, ...testCaseIds).count;
+  } else {
+    bugs = db.prepare('SELECT COUNT(*) as count FROM bugs WHERE project_id = ?').get(id).count;
+  }
+
+  const subProjects = db.prepare('SELECT COUNT(*) as count FROM projects WHERE parent_id = ?').get(id).count;
+  const members = db.prepare('SELECT COUNT(*) as count FROM project_members WHERE project_id = ?').get(id).count;
+
+  res.json({ testScripts, testResults, bugs, subProjects, members });
+});
+
+// DELETE /api/projects/:id — delete project and all associated data
 router.delete('/:id', (req, res) => {
   const { id } = req.params;
 
@@ -139,17 +191,40 @@ router.delete('/:id', (req, res) => {
     return res.status(404).json({ error: 'Project not found' });
   }
 
-  const testScripts = db.prepare(
-    'SELECT COUNT(*) as count FROM test_cases WHERE project_id = ?'
+  const subProjects = db.prepare(
+    'SELECT COUNT(*) as count FROM projects WHERE parent_id = ?'
   ).get(id);
 
-  if (testScripts.count > 0) {
+  if (subProjects.count > 0) {
     return res.status(409).json({
-      error: 'Cannot delete project: it has associated test scripts',
+      error: 'Cannot delete project: it has sub-projects. Delete or reassign them first.',
     });
   }
 
-  db.prepare('DELETE FROM projects WHERE id = ?').run(id);
+  const cascadeDelete = db.transaction(() => {
+    const testCaseIds = db.prepare('SELECT id FROM test_cases WHERE project_id = ?').all(id).map(r => r.id);
+
+    if (testCaseIds.length > 0) {
+      const placeholders = testCaseIds.map(() => '?').join(',');
+      // Delete test results referencing these test cases
+      db.prepare(`DELETE FROM test_results WHERE test_case_id IN (${placeholders})`).run(...testCaseIds);
+      // Unlink bugs from test cases (keep the bugs but clear the reference)
+      db.prepare(`UPDATE bugs SET test_case_id = NULL WHERE test_case_id IN (${placeholders})`).run(...testCaseIds);
+    }
+
+    // Delete bugs scoped to this project
+    db.prepare('DELETE FROM bugs WHERE project_id = ?').run(id);
+    // Delete test cases
+    db.prepare('DELETE FROM test_cases WHERE project_id = ?').run(id);
+    // Delete project members
+    db.prepare('DELETE FROM project_members WHERE project_id = ?').run(id);
+    // Delete AI generation logs
+    db.prepare('DELETE FROM ai_generation_logs WHERE project_id = ?').run(id);
+    // Delete the project
+    db.prepare('DELETE FROM projects WHERE id = ?').run(id);
+  });
+
+  cascadeDelete();
   res.status(204).end();
 });
 

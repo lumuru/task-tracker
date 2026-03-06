@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import FuzzyFilter, { fuzzyMatch } from '../components/FuzzyFilter';
-import { getProject, deleteProject, addProjectMembers, removeProjectMember, getProjectActivity } from '../api/projects';
+import { getProject, deleteProject, getProjectDeleteSummary, addProjectMembers, removeProjectMember, getProjectActivity } from '../api/projects';
 import { getMembers } from '../api/members';
 import { getProjectTestScripts, getProjectTestScriptModules, deleteProjectTestScript, uploadProjectTestScripts, bulkUpdateTestScriptStatus, exportProjectTestScripts } from '../api/projectTestScripts';
 import { getBugs, deleteBug } from '../api/bugs';
@@ -49,7 +49,7 @@ function formatDate(dateStr) {
   return d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
 }
 
-function OverflowMenu({ onDelete, hasTestScripts }) {
+function OverflowMenu({ onDelete }) {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
 
@@ -72,19 +72,12 @@ function OverflowMenu({ onDelete, hasTestScripts }) {
       </button>
       {open && (
         <div className="absolute right-0 top-full mt-1 w-44 bg-white border border-gray-200 rounded-lg shadow-lg z-10 py-1">
-          {hasTestScripts ? (
-            <div className="px-4 py-2 text-sm text-gray-400 cursor-not-allowed">
-              Delete
-              <span className="block text-xs">Has test scripts</span>
-            </div>
-          ) : (
-            <button
-              onClick={() => { setOpen(false); onDelete(); }}
-              className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors"
-            >
-              Delete
-            </button>
-          )}
+          <button
+            onClick={() => { setOpen(false); onDelete(); }}
+            className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors"
+          >
+            Delete Project
+          </button>
         </div>
       )}
     </div>
@@ -689,6 +682,8 @@ export default function ProjectDetail() {
   const [bugCount, setBugCount] = useState(0);
   const [activeTab, setActiveTab] = useState('overview');
   const [error, setError] = useState(null);
+  const [deleteModal, setDeleteModal] = useState(null);
+  const [deleting, setDeleting] = useState(false);
 
   const fetchData = async () => {
     try {
@@ -710,13 +705,25 @@ export default function ProjectDetail() {
 
   useEffect(() => { fetchData(); }, [id]);
 
-  const handleDelete = async () => {
-    if (!window.confirm('Are you sure you want to delete this project?')) return;
+  const handleDeleteClick = async () => {
+    try {
+      const summary = await getProjectDeleteSummary(id);
+      setDeleteModal(summary);
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  const handleDeleteConfirm = async () => {
+    setDeleting(true);
     try {
       await deleteProject(id);
       navigate('/projects');
     } catch (err) {
       setError(err.message);
+      setDeleteModal(null);
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -787,7 +794,7 @@ export default function ProjectDetail() {
             >
               Edit
             </Link>
-            <OverflowMenu onDelete={handleDelete} hasTestScripts={testScriptCount > 0} />
+            <OverflowMenu onDelete={handleDeleteClick} />
           </div>
         </div>
       </div>
@@ -831,6 +838,87 @@ export default function ProjectDetail() {
       )}
       {activeTab === 'activity' && (
         <ActivityTab projectId={id} />
+      )}
+
+      {/* Delete confirmation modal */}
+      {deleteModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-md mx-4">
+            <div className="p-6">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="flex-shrink-0 w-10 h-10 rounded-full bg-red-100 flex items-center justify-center">
+                  <svg className="w-5 h-5 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                  </svg>
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900">Delete Project</h3>
+                  <p className="text-sm text-gray-500">This action cannot be undone.</p>
+                </div>
+              </div>
+
+              {(deleteModal.testScripts > 0 || deleteModal.testResults > 0 || deleteModal.bugs > 0) ? (
+                <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg">
+                  <p className="text-sm font-medium text-red-800 mb-2">
+                    The following data will be permanently deleted:
+                  </p>
+                  <ul className="text-sm text-red-700 space-y-1">
+                    {deleteModal.testScripts > 0 && (
+                      <li className="flex items-center gap-2">
+                        <span className="w-1.5 h-1.5 rounded-full bg-red-400 flex-shrink-0" />
+                        {deleteModal.testScripts} test script{deleteModal.testScripts !== 1 ? 's' : ''}
+                      </li>
+                    )}
+                    {deleteModal.testResults > 0 && (
+                      <li className="flex items-center gap-2">
+                        <span className="w-1.5 h-1.5 rounded-full bg-red-400 flex-shrink-0" />
+                        {deleteModal.testResults} test execution result{deleteModal.testResults !== 1 ? 's' : ''}
+                      </li>
+                    )}
+                    {deleteModal.bugs > 0 && (
+                      <li className="flex items-center gap-2">
+                        <span className="w-1.5 h-1.5 rounded-full bg-red-400 flex-shrink-0" />
+                        {deleteModal.bugs} bug{deleteModal.bugs !== 1 ? 's' : ''}
+                      </li>
+                    )}
+                    {deleteModal.members > 0 && (
+                      <li className="flex items-center gap-2">
+                        <span className="w-1.5 h-1.5 rounded-full bg-red-400 flex-shrink-0" />
+                        {deleteModal.members} member assignment{deleteModal.members !== 1 ? 's' : ''}
+                      </li>
+                    )}
+                  </ul>
+                </div>
+              ) : (
+                <p className="mb-4 text-sm text-gray-600">
+                  Are you sure you want to delete <span className="font-medium">"{project.name}"</span>?
+                </p>
+              )}
+
+              {deleteModal.subProjects > 0 && (
+                <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800">
+                  This project has {deleteModal.subProjects} sub-project{deleteModal.subProjects !== 1 ? 's' : ''} that must be deleted or reassigned first.
+                </div>
+              )}
+
+              <div className="flex justify-end gap-3">
+                <button
+                  onClick={() => setDeleteModal(null)}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleDeleteConfirm}
+                  disabled={deleting || deleteModal.subProjects > 0}
+                  className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-md hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  {deleting ? 'Deleting...' : 'Delete Project'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

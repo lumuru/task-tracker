@@ -39,6 +39,12 @@ export async function updateProject(id, data) {
   return res.json();
 }
 
+export async function getProjectDeleteSummary(id) {
+  const res = await authFetch(`/api/projects/${id}/delete-summary`);
+  if (!res.ok) throw new Error('Failed to fetch delete summary');
+  return res.json();
+}
+
 export async function deleteProject(id) {
   const res = await authFetch(`/api/projects/${id}`, {
     method: 'DELETE',
