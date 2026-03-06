@@ -10,8 +10,10 @@ export async function getProjectTestScripts(projectId, filters = {}) {
   const query = params.toString();
   const res = await authFetch(`/api/projects/${projectId}/test-scripts${query ? '?' + query : ''}`);
   if (!res.ok) {
-    const err = await res.json();
-    throw new Error(err.error || 'Failed to fetch test scripts');
+    const text = await res.text();
+    let msg = 'Failed to fetch test scripts';
+    try { msg = JSON.parse(text).error || msg; } catch (_) {}
+    throw new Error(msg);
   }
   return res.json();
 }
@@ -80,7 +82,12 @@ export async function bulkUpdateTestScriptStatus(projectId, ids, status) {
 
 export async function exportProjectTestScripts(projectId) {
   const res = await authFetch(`/api/projects/${projectId}/test-scripts/export`);
-  if (!res.ok) throw new Error('Failed to export test scripts');
+  if (!res.ok) {
+    const text = await res.text();
+    let msg = 'Failed to export test scripts';
+    try { msg = JSON.parse(text).error || msg; } catch (_) {}
+    throw new Error(msg);
+  }
   const blob = await res.blob();
   const disposition = res.headers.get('Content-Disposition') || '';
   const match = disposition.match(/filename="(.+)"/);
