@@ -40,6 +40,18 @@ export default function BugForm() {
       setMembers(m);
       setProjects(p);
       setTestCases(tc);
+      // Auto-fill project_id from linked test case when test_case_id is set from URL
+      const tcIdParam = searchParams.get('test_case_id');
+      if (tcIdParam) {
+        const tcFromParam = tc.find(t => String(t.id) === String(tcIdParam));
+        if (tcFromParam) {
+          setForm(prev => ({
+            ...prev,
+            project_id: prev.project_id || String(tcFromParam.project_id || ''),
+            module: tcFromParam.module || prev.module,
+          }));
+        }
+      }
     });
 
     if (isEditing) {
@@ -72,7 +84,9 @@ export default function BugForm() {
   const handleChange = (e) => {
     const { name, value } = e.target;
     if (name === 'project_id') {
-      setForm({ ...form, project_id: value, test_case_id: '' });
+      const currentTc = testCases.find(tc => String(tc.id) === String(form.test_case_id));
+      const shouldReset = !currentTc || String(currentTc.project_id) !== String(value);
+      setForm({ ...form, project_id: value, test_case_id: shouldReset ? '' : form.test_case_id });
     } else {
       setForm({ ...form, [name]: value });
     }
