@@ -73,6 +73,60 @@ router.get('/modules', (req, res) => {
   res.json(modules.map(m => m.module));
 });
 
+// GET /api/projects/:projectId/test-scripts/export — download test scripts as Excel template
+router.get('/export', (req, res) => {
+  const { projectId } = req.params;
+  const project = getProject(projectId);
+
+  if (!project) {
+    return res.status(404).json({ error: 'Project not found' });
+  }
+
+  const scripts = db.prepare(
+    'SELECT * FROM test_cases WHERE project_id = ? ORDER BY id'
+  ).all(projectId);
+
+  const rows = scripts.map((tc, i) => ({
+    'TEST CASE ID#': `TC${String(i + 1).padStart(2, '0')}`,
+    'TEST SCENARIO': tc.module || '',
+    'TEST CASE': tc.title,
+    'TEST STEPS': tc.steps || '',
+    'EXPECTED RESULT': tc.expected_result || '',
+    'ACTUAL RESULT': '',
+    'TESTER': '',
+    'TEST DATE': '',
+    'EXECUTED?': 'No',
+    'RESULT': 'Not Started',
+    'REMARKS': '',
+  }));
+
+  const worksheet = XLSX.utils.json_to_sheet(rows);
+
+  worksheet['!cols'] = [
+    { wch: 14 },  // TEST CASE ID#
+    { wch: 25 },  // TEST SCENARIO
+    { wch: 35 },  // TEST CASE
+    { wch: 45 },  // TEST STEPS
+    { wch: 35 },  // EXPECTED RESULT
+    { wch: 30 },  // ACTUAL RESULT
+    { wch: 18 },  // TESTER
+    { wch: 14 },  // TEST DATE
+    { wch: 12 },  // EXECUTED?
+    { wch: 12 },  // RESULT
+    { wch: 25 },  // REMARKS
+  ];
+
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, worksheet, 'Test Scripts');
+
+  const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+
+  const filename = `Test Scripts - ${project.name}.xlsx`;
+  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+  res.send(buffer);
+});
+
 // GET /api/projects/:projectId/test-scripts/:id — get single test script
 router.get('/:id', (req, res) => {
   const { projectId, id } = req.params;

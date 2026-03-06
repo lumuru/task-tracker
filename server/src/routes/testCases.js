@@ -76,7 +76,18 @@ router.post('/upload', upload.single('file'), (req, res) => {
     }
 
     // Normalize column headers: lowercase + underscores
-    const normalize = (key) => key.trim().toLowerCase().replace(/\s+/g, '_');
+    const normalize = (key) => key.trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
+
+    // Map template column names to internal fields
+    const FIELD_ALIASES = {
+      title: 'title', test_case: 'title',
+      module: 'module', test_scenario: 'module',
+      steps: 'steps', test_steps: 'steps',
+      expected_result: 'expected_result',
+      description: 'description',
+      priority: 'priority',
+      status: 'status',
+    };
 
     const VALID_PRIORITIES = ['critical', 'high', 'medium', 'low'];
     const VALID_STATUSES = ['draft', 'ready', 'deprecated'];
@@ -92,7 +103,11 @@ router.post('/upload', upload.single('file'), (req, res) => {
     const insertAll = db.transaction(() => {
       rows.forEach((raw, i) => {
         const row = {};
-        Object.entries(raw).forEach(([k, v]) => { row[normalize(k)] = v; });
+        Object.entries(raw).forEach(([k, v]) => {
+          const normalized = normalize(k);
+          const field = FIELD_ALIASES[normalized] || normalized;
+          if (!row[field]) row[field] = v;
+        });
 
         const title = (row.title || '').toString().trim();
         if (!title) {

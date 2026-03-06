@@ -3,7 +3,7 @@ import { useParams, Link, useNavigate } from 'react-router-dom';
 import FuzzyFilter, { fuzzyMatch } from '../components/FuzzyFilter';
 import { getProject, deleteProject, addProjectMembers, removeProjectMember, getProjectActivity } from '../api/projects';
 import { getMembers } from '../api/members';
-import { getProjectTestScripts, getProjectTestScriptModules, deleteProjectTestScript, uploadProjectTestScripts, bulkUpdateTestScriptStatus } from '../api/projectTestScripts';
+import { getProjectTestScripts, getProjectTestScriptModules, deleteProjectTestScript, uploadProjectTestScripts, bulkUpdateTestScriptStatus, exportProjectTestScripts } from '../api/projectTestScripts';
 import { getBugs, deleteBug } from '../api/bugs';
 
 const statusColors = {
@@ -181,6 +181,39 @@ function OverviewTab({ project, allMembers, onAddMember, onRemoveMember, testScr
           </div>
         </div>
       </div>
+
+      {/* Sub-Projects section */}
+      {project.sub_projects && project.sub_projects.length > 0 && (
+        <div className="bg-white border border-gray-200 rounded-lg p-4">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-semibold text-gray-700">Sub-Projects ({project.sub_projects.length})</h3>
+            <Link
+              to={`/projects/new?parent_id=${project.id}`}
+              className="text-xs text-blue-600 hover:text-blue-800 font-medium"
+            >
+              + Add Sub-Project
+            </Link>
+          </div>
+          <div className="divide-y divide-gray-100">
+            {project.sub_projects.map((sub) => (
+              <Link
+                key={sub.id}
+                to={`/projects/${sub.id}`}
+                className="flex items-center justify-between py-2 hover:bg-gray-50 -mx-2 px-2 rounded transition-colors"
+              >
+                <div className="flex items-center gap-2">
+                  <span className={`w-2 h-2 rounded-full ${sub.status === 'active' ? 'bg-green-500' : 'bg-gray-300'}`} />
+                  <span className="text-sm font-medium text-gray-800">{sub.name}</span>
+                </div>
+                <div className="flex items-center gap-3 text-xs text-gray-400">
+                  <span>{sub.test_script_count} scripts</span>
+                  <span>{sub.member_count} members</span>
+                </div>
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -197,6 +230,7 @@ function TestScriptsTab({ projectId, project }) {
   const [uploadResult, setUploadResult] = useState(null);
   const [selected, setSelected] = useState(new Set());
   const [bulkUpdating, setBulkUpdating] = useState(false);
+  const [exporting, setExporting] = useState(false);
 
   const fetchScripts = async () => {
     try {
@@ -266,6 +300,17 @@ function TestScriptsTab({ projectId, project }) {
     }
   };
 
+  const handleExport = async () => {
+    setExporting(true);
+    try {
+      await exportProjectTestScripts(projectId);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setExporting(false);
+    }
+  };
+
   const handleBulkStatus = async (status) => {
     if (selected.size === 0) return;
     setBulkUpdating(true);
@@ -322,6 +367,13 @@ function TestScriptsTab({ projectId, project }) {
         />
 
         <div className="ml-auto flex gap-2">
+          <button
+            onClick={handleExport}
+            disabled={exporting || scripts.length === 0}
+            className="px-4 py-2.5 text-sm font-medium rounded-lg transition-colors bg-gray-100 text-gray-700 hover:bg-gray-200 disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            {exporting ? 'Exporting...' : 'Export Scripts'}
+          </button>
           <label className={`px-4 py-2.5 text-sm font-medium rounded-lg cursor-pointer transition-colors ${uploading ? 'bg-gray-300 text-gray-500' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>
             {uploading ? 'Uploading...' : 'Upload Excel'}
             <input type="file" accept=".xlsx,.xls" onChange={handleUpload} disabled={uploading} className="hidden" />
@@ -704,6 +756,15 @@ export default function ProjectDetail() {
         <Link to="/projects" className="text-sm text-blue-600 hover:text-blue-800 mb-2 inline-block">&larr; Back to Projects</Link>
         <div className="flex items-start justify-between">
           <div className="flex-1 min-w-0">
+            {project.parent_id && project.parent_name && (
+              <div className="text-sm text-gray-500 mb-1">
+                <Link to={`/projects/${project.parent_id}`} className="text-blue-600 hover:text-blue-800">
+                  {project.parent_name}
+                </Link>
+                <span className="mx-1.5">/</span>
+                <span className="text-gray-700">{project.name}</span>
+              </div>
+            )}
             <div className="flex items-center gap-3 mb-1">
               <h2 className="text-2xl font-bold text-gray-800 truncate">{project.name}</h2>
               <span className={`inline-block px-2.5 py-1 text-xs font-medium rounded-full flex-shrink-0 ${statusColors[project.status] || ''}`}>

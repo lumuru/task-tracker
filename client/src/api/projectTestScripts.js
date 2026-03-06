@@ -78,6 +78,21 @@ export async function bulkUpdateTestScriptStatus(projectId, ids, status) {
   return res.json();
 }
 
+export async function exportProjectTestScripts(projectId) {
+  const res = await authFetch(`/api/projects/${projectId}/test-scripts/export`);
+  if (!res.ok) throw new Error('Failed to export test scripts');
+  const blob = await res.blob();
+  const disposition = res.headers.get('Content-Disposition') || '';
+  const match = disposition.match(/filename="(.+)"/);
+  const filename = match ? match[1] : `Test Scripts.xlsx`;
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 export async function uploadProjectTestScripts(projectId, file, createdBy) {
   const formData = new FormData();
   formData.append('file', file);
