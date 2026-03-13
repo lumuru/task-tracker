@@ -6,6 +6,18 @@ const router = express.Router();
 // GET /api/projects — list all projects with member count and test script count
 router.get('/', (req, res) => {
   const { status } = req.query;
+  const isMember = req.user.role !== 'admin';
+
+  // If member, resolve their assigned project IDs first
+  let memberProjectIds = null;
+  if (isMember) {
+    const rows = db.prepare('SELECT project_id FROM project_members WHERE member_id = ?').all(req.user.id);
+    memberProjectIds = rows.map(r => r.project_id);
+    if (memberProjectIds.length === 0) {
+      return res.json([]);
+    }
+  }
+
   let sql = `
     SELECT p.*,
       (SELECT COUNT(*) FROM project_members WHERE project_id = p.id) AS member_count,
@@ -16,10 +28,23 @@ router.get('/', (req, res) => {
     FROM projects p
   `;
   const params = [];
+  const conditions = [];
+
   if (status && ['active', 'archived'].includes(status)) {
-    sql += ' WHERE p.status = ?';
+    conditions.push('p.status = ?');
     params.push(status);
   }
+
+  if (isMember) {
+    const placeholders = memberProjectIds.map(() => '?').join(',');
+    conditions.push(`p.id IN (${placeholders})`);
+    params.push(...memberProjectIds);
+  }
+
+  if (conditions.length > 0) {
+    sql += ' WHERE ' + conditions.join(' AND ');
+  }
+
   sql += ' ORDER BY p.created_at DESC';
   const projects = db.prepare(sql).all(...params);
   res.json(projects);
@@ -28,6 +53,17 @@ router.get('/', (req, res) => {
 // GET /api/projects/:id — get project detail with members list
 router.get('/:id', (req, res) => {
   const { id } = req.params;
+  const isMember = req.user.role !== 'admin';
+
+  // If member, verify they are assigned to this project
+  if (isMember) {
+    const assignment = db.prepare(
+      'SELECT 1 FROM project_members WHERE project_id = ? AND member_id = ?'
+    ).get(id, req.user.id);
+    if (!assignment) {
+      return res.status(404).json({ error: 'Project not found' });
+    }
+  }
 
   const project = db.prepare(`
     SELECT p.*,
