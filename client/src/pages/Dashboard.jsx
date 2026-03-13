@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { authFetch } from '../api/base';
+import { useAuth } from '../context/AuthContext';
+import { authFetch, getToken } from '../api/base';
 
 const statusColors = {
   active: 'bg-green-100 text-green-800',
@@ -24,6 +25,7 @@ function passRateColor(rate) {
 
 
 export default function Dashboard() {
+  const { user } = useAuth();
   const [stats, setStats] = useState(null);
   const [activity, setActivity] = useState(null);
   const [projectSummary, setProjectSummary] = useState(null);
@@ -31,11 +33,20 @@ export default function Dashboard() {
   const [error, setError] = useState(null);
 
   useEffect(() => {
+    const BASE_URL = import.meta.env.VITE_API_URL || '';
+    const fetchFn = (url) => {
+      const token = getToken();
+      if (token) {
+        return authFetch(url);
+      }
+      return fetch(`${BASE_URL}${url}`);
+    };
+
     Promise.all([
-      authFetch('/api/dashboard/stats').then(r => r.json()),
-      authFetch('/api/dashboard/activity').then(r => r.json()),
-      authFetch('/api/dashboard/project-summary').then(r => r.json()),
-      authFetch('/api/dashboard/team-assignments').then(r => r.json()),
+      fetchFn('/api/dashboard/stats').then(r => r.json()),
+      fetchFn('/api/dashboard/activity').then(r => r.json()),
+      fetchFn('/api/dashboard/project-summary').then(r => r.json()),
+      fetchFn('/api/dashboard/team-assignments').then(r => r.json()),
     ])
       .then(([s, a, p, t]) => { setStats(s); setActivity(a); setProjectSummary(p); setTeamAssignments(t); })
       .catch((err) => setError(err.message));
@@ -48,25 +59,53 @@ export default function Dashboard() {
     <div>
       <h2 className="text-2xl font-bold text-gray-800 mb-6">Dashboard</h2>
 
+      {!user && (
+        <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-700">
+          You are viewing the public dashboard. Login to access full features and manage your projects.
+        </div>
+      )}
+
       {/* Summary Cards */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 mb-8">
-        <Link to="/projects" className="p-5 bg-white rounded-lg border border-gray-200 hover:shadow-md transition-shadow">
-          <p className="text-sm text-gray-500">Total Projects</p>
-          <p className="text-3xl font-bold text-gray-800 mt-1">{stats.total_projects}</p>
-        </Link>
+        {user ? (
+          <Link to="/projects" className="p-5 bg-white rounded-lg border border-gray-200 hover:shadow-md transition-shadow">
+            <p className="text-sm text-gray-500">Total Projects</p>
+            <p className="text-3xl font-bold text-gray-800 mt-1">{stats.total_projects}</p>
+          </Link>
+        ) : (
+          <div className="p-5 bg-white rounded-lg border border-gray-200">
+            <p className="text-sm text-gray-500">Total Projects</p>
+            <p className="text-3xl font-bold text-gray-800 mt-1">{stats.total_projects}</p>
+          </div>
+        )}
         <div className="p-5 bg-white rounded-lg border border-gray-200">
           <p className="text-sm text-gray-500">Testers</p>
           <p className="text-3xl font-bold text-gray-800 mt-1">{stats.total_users}</p>
         </div>
-        <Link to="/projects" className="p-5 bg-white rounded-lg border border-gray-200 hover:shadow-md transition-shadow">
-          <p className="text-sm text-gray-500">Active Projects</p>
-          <p className="text-3xl font-bold text-green-600 mt-1">{stats.active_projects}</p>
-        </Link>
-        <Link to="/bugs" className="p-5 bg-white rounded-lg border border-gray-200 hover:shadow-md transition-shadow">
-          <p className="text-sm text-gray-500">Open Defects</p>
-          <p className="text-3xl font-bold text-red-600 mt-1">{stats.bugs.open}</p>
-          <p className="text-xs text-gray-400 mt-1">{stats.bugs.total} total</p>
-        </Link>
+        {user ? (
+          <Link to="/projects" className="p-5 bg-white rounded-lg border border-gray-200 hover:shadow-md transition-shadow">
+            <p className="text-sm text-gray-500">Active Projects</p>
+            <p className="text-3xl font-bold text-green-600 mt-1">{stats.active_projects}</p>
+          </Link>
+        ) : (
+          <div className="p-5 bg-white rounded-lg border border-gray-200">
+            <p className="text-sm text-gray-500">Active Projects</p>
+            <p className="text-3xl font-bold text-green-600 mt-1">{stats.active_projects}</p>
+          </div>
+        )}
+        {user ? (
+          <Link to="/bugs" className="p-5 bg-white rounded-lg border border-gray-200 hover:shadow-md transition-shadow">
+            <p className="text-sm text-gray-500">Open Defects</p>
+            <p className="text-3xl font-bold text-red-600 mt-1">{stats.bugs.open}</p>
+            <p className="text-xs text-gray-400 mt-1">{stats.bugs.total} total</p>
+          </Link>
+        ) : (
+          <div className="p-5 bg-white rounded-lg border border-gray-200">
+            <p className="text-sm text-gray-500">Open Defects</p>
+            <p className="text-3xl font-bold text-red-600 mt-1">{stats.bugs.open}</p>
+            <p className="text-xs text-gray-400 mt-1">{stats.bugs.total} total</p>
+          </div>
+        )}
         <div className="p-5 bg-white rounded-lg border border-gray-200">
           <p className="text-sm text-gray-500">Avg Pass Rate</p>
           <p className={`text-3xl font-bold mt-1 ${passRateColor(stats.avg_pass_rate)}`}>
@@ -94,9 +133,13 @@ export default function Dashboard() {
                 {projectSummary.map((p) => (
                   <tr key={p.id} className="hover:bg-gray-50">
                     <td className="px-4 py-3">
-                      <Link to={`/projects/${p.id}`} className="text-sm text-blue-600 hover:text-blue-800 font-medium">
-                        {p.name}
-                      </Link>
+                      {user ? (
+                        <Link to={`/projects/${p.id}`} className="text-sm text-blue-600 hover:text-blue-800 font-medium">
+                          {p.name}
+                        </Link>
+                      ) : (
+                        <span className="text-sm text-gray-800 font-medium">{p.name}</span>
+                      )}
                     </td>
                     <td className="px-4 py-3 text-center text-sm text-gray-800 font-medium">{p.test_case_count}</td>
                     <td className="px-4 py-3 text-center">
@@ -189,18 +232,32 @@ export default function Dashboard() {
                   {member.projects.length > 0 ? (
                     <div className="flex flex-wrap gap-1.5 mt-1.5">
                       {member.projects.map((p) => (
-                        <Link
-                          key={p.id}
-                          to={`/projects/${p.id}`}
-                          className={`inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full hover:opacity-80 transition-opacity ${
-                            p.status === 'active'
-                              ? 'bg-blue-50 text-blue-700'
-                              : 'bg-gray-100 text-gray-500'
-                          }`}
-                        >
-                          <span className={`w-1.5 h-1.5 rounded-full ${p.status === 'active' ? 'bg-blue-400' : 'bg-gray-300'}`} />
-                          {p.name}
-                        </Link>
+                        user ? (
+                          <Link
+                            key={p.id}
+                            to={`/projects/${p.id}`}
+                            className={`inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full hover:opacity-80 transition-opacity ${
+                              p.status === 'active'
+                                ? 'bg-blue-50 text-blue-700'
+                                : 'bg-gray-100 text-gray-500'
+                            }`}
+                          >
+                            <span className={`w-1.5 h-1.5 rounded-full ${p.status === 'active' ? 'bg-blue-400' : 'bg-gray-300'}`} />
+                            {p.name}
+                          </Link>
+                        ) : (
+                          <span
+                            key={p.id}
+                            className={`inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full ${
+                              p.status === 'active'
+                                ? 'bg-blue-50 text-blue-700'
+                                : 'bg-gray-100 text-gray-500'
+                            }`}
+                          >
+                            <span className={`w-1.5 h-1.5 rounded-full ${p.status === 'active' ? 'bg-blue-400' : 'bg-gray-300'}`} />
+                            {p.name}
+                          </span>
+                        )
                       ))}
                     </div>
                   ) : (
@@ -222,15 +279,26 @@ export default function Dashboard() {
           <h3 className="text-sm font-medium text-gray-500 mb-3">Open Bugs by Severity</h3>
           <div className="flex gap-3">
             {stats.bugs_by_severity.map(({ severity, count }) => (
-              <Link
-                key={severity}
-                to={`/bugs?severity=${severity}`}
-                className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 rounded-lg hover:shadow-sm"
-              >
-                <span className={`w-2.5 h-2.5 rounded-full ${severityColors[severity] || 'bg-gray-400'}`} />
-                <span className="text-sm font-medium text-gray-700 capitalize">{severity}</span>
-                <span className="text-sm font-bold text-gray-800">{count}</span>
-              </Link>
+              user ? (
+                <Link
+                  key={severity}
+                  to={`/bugs?severity=${severity}`}
+                  className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 rounded-lg hover:shadow-sm"
+                >
+                  <span className={`w-2.5 h-2.5 rounded-full ${severityColors[severity] || 'bg-gray-400'}`} />
+                  <span className="text-sm font-medium text-gray-700 capitalize">{severity}</span>
+                  <span className="text-sm font-bold text-gray-800">{count}</span>
+                </Link>
+              ) : (
+                <div
+                  key={severity}
+                  className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 rounded-lg"
+                >
+                  <span className={`w-2.5 h-2.5 rounded-full ${severityColors[severity] || 'bg-gray-400'}`} />
+                  <span className="text-sm font-medium text-gray-700 capitalize">{severity}</span>
+                  <span className="text-sm font-bold text-gray-800">{count}</span>
+                </div>
+              )
             ))}
           </div>
         </div>
@@ -246,9 +314,13 @@ export default function Dashboard() {
               {activity.recent_bugs.map((bug) => (
                 <div key={bug.id} className="px-4 py-3 flex items-center justify-between">
                   <div className="min-w-0">
-                    <Link to={`/bugs/${bug.id}`} className="text-sm text-blue-600 hover:text-blue-800 font-medium truncate block">
-                      {bug.title}
-                    </Link>
+                    {user ? (
+                      <Link to={`/bugs/${bug.id}`} className="text-sm text-blue-600 hover:text-blue-800 font-medium truncate block">
+                        {bug.title}
+                      </Link>
+                    ) : (
+                      <span className="text-sm text-gray-800 font-medium truncate block">{bug.title}</span>
+                    )}
                     <p className="text-xs text-gray-400">
                       {bug.reported_by_name && <span>by {bug.reported_by_name} &middot; </span>}
                       {bug.created_at}
@@ -276,9 +348,13 @@ export default function Dashboard() {
                 return (
                   <div key={run.id} className="px-4 py-3 flex items-center justify-between">
                     <div className="min-w-0 flex-1">
-                      <Link to={`/test-runs/${run.id}`} className="text-sm text-blue-600 hover:text-blue-800 font-medium truncate block">
-                        {run.name}
-                      </Link>
+                      {user ? (
+                        <Link to={`/test-runs/${run.id}`} className="text-sm text-blue-600 hover:text-blue-800 font-medium truncate block">
+                          {run.name}
+                        </Link>
+                      ) : (
+                        <span className="text-sm text-gray-800 font-medium truncate block">{run.name}</span>
+                      )}
                       <p className="text-xs text-gray-400">
                         {run.project_name && <span>{run.project_name} &middot; </span>}
                         {run.date || run.created_at}
