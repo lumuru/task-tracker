@@ -1,6 +1,7 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import Layout from './components/Layout';
+import PublicLayout from './components/PublicLayout';
 import Login from './pages/Login';
 import ChangePassword from './pages/ChangePassword';
 import Dashboard from './pages/Dashboard';
@@ -76,6 +77,14 @@ function AppRoutes() {
       <Route path="/login" element={user ? <Navigate to="/" replace /> : <Login />} />
       <Route path="/change-password" element={user ? <ChangePassword /> : <Navigate to="/login" replace />} />
 
+      {/* Public dashboard for visitors */}
+      {!user && (
+        <Route element={<PublicLayout />}>
+          <Route path="/" element={<Dashboard />} />
+        </Route>
+      )}
+
+      {/* Authenticated routes with sidebar */}
       <Route element={<PrivateRoute><Layout /></PrivateRoute>}>
         <Route path="/" element={<Dashboard />} />
         <Route path="/projects" element={<Projects />} />
