@@ -6,7 +6,18 @@ const router = express.Router();
 
 // GET /api/test-runs — list all runs with summary counts
 router.get('/', (req, res) => {
-  const runs = db.prepare(`
+  const isMember = req.user.role !== 'admin';
+  let memberProjectIds = null;
+  if (isMember) {
+    memberProjectIds = db.prepare(
+      'SELECT project_id FROM project_members WHERE member_id = ?'
+    ).all(req.user.id).map(r => r.project_id);
+    if (memberProjectIds.length === 0) {
+      return res.json([]);
+    }
+  }
+
+  let sql = `
     SELECT tr.*, tm.name as created_by_name, p.name as project_name,
       (SELECT COUNT(*) FROM test_results WHERE test_run_id = tr.id) as total,
       (SELECT COUNT(*) FROM test_results WHERE test_run_id = tr.id AND status = 'pass') as passed,
@@ -15,9 +26,17 @@ router.get('/', (req, res) => {
       (SELECT COUNT(*) FROM test_results WHERE test_run_id = tr.id AND status = 'skipped') as skipped
     FROM test_runs tr
     LEFT JOIN team_members tm ON tr.created_by = tm.id
-    LEFT JOIN projects p ON tr.project_id = p.id
-    ORDER BY tr.created_at DESC
-  `).all();
+    LEFT JOIN projects p ON tr.project_id = p.id`;
+
+  const params = [];
+  if (isMember) {
+    sql += ` WHERE tr.project_id IN (${memberProjectIds.map(() => '?').join(', ')})`;
+    params.push(...memberProjectIds);
+  }
+
+  sql += ' ORDER BY tr.created_at DESC';
+
+  const runs = db.prepare(sql).all(...params);
   res.json(runs);
 });
 
@@ -32,6 +51,16 @@ router.get('/:id', (req, res) => {
 
   if (!run) {
     return res.status(404).json({ error: 'Test run not found' });
+  }
+
+  const isMember = req.user.role !== 'admin';
+  if (isMember) {
+    const memberProjectIds = db.prepare(
+      'SELECT project_id FROM project_members WHERE member_id = ?'
+    ).all(req.user.id).map(r => r.project_id);
+    if (!memberProjectIds.includes(run.project_id)) {
+      return res.status(404).json({ error: 'Test run not found' });
+    }
   }
 
   const results = db.prepare(`

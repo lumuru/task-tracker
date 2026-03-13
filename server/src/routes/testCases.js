@@ -10,6 +10,17 @@ const router = express.Router();
 router.get('/', (req, res) => {
   const { module, priority, status, search, project_id } = req.query;
 
+  const isMember = req.user.role !== 'admin';
+  let memberProjectIds = null;
+  if (isMember) {
+    memberProjectIds = db.prepare(
+      'SELECT project_id FROM project_members WHERE member_id = ?'
+    ).all(req.user.id).map(r => r.project_id);
+    if (memberProjectIds.length === 0) {
+      return res.json([]);
+    }
+  }
+
   let sql = `SELECT tc.*, tm.name as created_by_name, p.name as project_name,
     (SELECT r.status FROM test_results r JOIN test_runs tr ON r.test_run_id = tr.id WHERE r.test_case_id = tc.id ORDER BY r.executed_at DESC LIMIT 1) as last_exec_status,
     (SELECT r.executed_at FROM test_results r JOIN test_runs tr ON r.test_run_id = tr.id WHERE r.test_case_id = tc.id ORDER BY r.executed_at DESC LIMIT 1) as last_exec_date,
@@ -19,6 +30,11 @@ router.get('/', (req, res) => {
     LEFT JOIN projects p ON tc.project_id = p.id`;
   const conditions = [];
   const params = [];
+
+  if (isMember) {
+    conditions.push(`tc.project_id IN (${memberProjectIds.map(() => '?').join(', ')})`);
+    params.push(...memberProjectIds);
+  }
 
   if (module) {
     conditions.push('tc.module = ?');
@@ -172,6 +188,17 @@ router.get('/:id', (req, res) => {
   if (!testCase) {
     return res.status(404).json({ error: 'Test case not found' });
   }
+
+  const isMember = req.user.role !== 'admin';
+  if (isMember) {
+    const memberProjectIds = db.prepare(
+      'SELECT project_id FROM project_members WHERE member_id = ?'
+    ).all(req.user.id).map(r => r.project_id);
+    if (!memberProjectIds.includes(testCase.project_id)) {
+      return res.status(404).json({ error: 'Test case not found' });
+    }
+  }
+
   res.json(testCase);
 });
 

@@ -7,6 +7,17 @@ const router = express.Router();
 router.get('/', (req, res) => {
   const { status, severity, priority, assigned_to, module, search, test_case_id, project_id } = req.query;
 
+  const isMember = req.user.role !== 'admin';
+  let memberProjectIds = null;
+  if (isMember) {
+    memberProjectIds = db.prepare(
+      'SELECT project_id FROM project_members WHERE member_id = ?'
+    ).all(req.user.id).map(r => r.project_id);
+    if (memberProjectIds.length === 0) {
+      return res.json([]);
+    }
+  }
+
   let sql = `
     SELECT b.*,
       assignee.name as assigned_to_name,
@@ -21,6 +32,11 @@ router.get('/', (req, res) => {
   `;
   const conditions = [];
   const params = [];
+
+  if (isMember) {
+    conditions.push(`b.project_id IN (${memberProjectIds.map(() => '?').join(', ')})`);
+    params.push(...memberProjectIds);
+  }
 
   if (status) {
     conditions.push('b.status = ?');
@@ -90,6 +106,17 @@ router.get('/:id', (req, res) => {
   if (!bug) {
     return res.status(404).json({ error: 'Bug not found' });
   }
+
+  const isMember = req.user.role !== 'admin';
+  if (isMember) {
+    const memberProjectIds = db.prepare(
+      'SELECT project_id FROM project_members WHERE member_id = ?'
+    ).all(req.user.id).map(r => r.project_id);
+    if (!memberProjectIds.includes(bug.project_id)) {
+      return res.status(404).json({ error: 'Bug not found' });
+    }
+  }
+
   res.json(bug);
 });
 
