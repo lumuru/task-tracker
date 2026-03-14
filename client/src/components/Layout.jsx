@@ -1,5 +1,23 @@
 import { NavLink, Outlet } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import {
+  LayoutDashboard,
+  FolderKanban,
+  ClipboardList,
+  PlayCircle,
+  Bug,
+  Settings,
+  LogOut,
+} from 'lucide-react';
+
+const iconMap = {
+  '/': LayoutDashboard,
+  '/projects': FolderKanban,
+  '/test-cases': ClipboardList,
+  '/test-runs': PlayCircle,
+  '/bugs': Bug,
+  '/settings': Settings,
+};
 
 export default function Layout() {
   const { user, logout, isAdmin } = useAuth();
@@ -15,42 +33,54 @@ export default function Layout() {
 
   return (
     <div className="flex h-screen bg-gray-50">
-      <aside className="w-56 bg-white border-r border-gray-200 flex flex-col">
-        <div className="px-4 py-5 border-b border-gray-200">
-          <h1 className="text-lg font-bold text-gray-800">QA Task Tracker</h1>
+      <aside className="w-60 bg-slate-900 flex flex-col">
+        {/* Brand */}
+        <div className="px-5 py-5">
+          <div className="flex items-center gap-2">
+            <div className="w-7 h-7 rounded-lg bg-blue-500 flex items-center justify-center">
+              <ClipboardList size={16} className="text-white" />
+            </div>
+            <h1 className="text-base font-semibold text-white tracking-tight">QA Tracker</h1>
+          </div>
         </div>
-        <nav className="flex-1 px-2 py-4 space-y-1">
-          {navItems.map(({ to, label }) => (
-            <NavLink
-              key={to}
-              to={to}
-              end={to === '/'}
-              className={({ isActive }) =>
-                `block px-3 py-2 rounded-md text-sm font-medium ${
-                  isActive
-                    ? 'bg-blue-50 text-blue-700'
-                    : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
-                }`
-              }
-            >
-              {label}
-            </NavLink>
-          ))}
+
+        {/* Navigation */}
+        <nav className="flex-1 px-3 py-2 space-y-0.5">
+          {navItems.map(({ to, label }) => {
+            const Icon = iconMap[to] || LayoutDashboard;
+            return (
+              <NavLink
+                key={to}
+                to={to}
+                end={to === '/'}
+                className={({ isActive }) =>
+                  `flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors duration-150 ${
+                    isActive
+                      ? 'bg-slate-800 text-white border-l-2 border-blue-500 -ml-[2px]'
+                      : 'text-slate-400 hover:bg-slate-800/50 hover:text-slate-200'
+                  }`
+                }
+              >
+                <Icon size={18} />
+                {label}
+              </NavLink>
+            );
+          })}
         </nav>
 
         {/* User footer */}
         {user && (
-          <div className="border-t border-gray-200 px-4 py-3">
-            <div className="flex items-center gap-2 mb-2">
-              <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center text-sm font-bold">
+          <div className="border-t border-slate-700/50 px-4 py-4">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-8 h-8 rounded-full bg-blue-500 text-white flex items-center justify-center text-sm font-semibold flex-shrink-0">
                 {user.name?.charAt(0)?.toUpperCase() || '?'}
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-gray-800 truncate">{user.name}</p>
+                <p className="text-sm font-medium text-slate-200 truncate">{user.name}</p>
                 <span className={`inline-block px-1.5 py-0.5 text-[10px] font-medium rounded-full ${
                   user.role === 'admin'
-                    ? 'bg-purple-100 text-purple-700'
-                    : 'bg-gray-100 text-gray-600'
+                    ? 'bg-purple-500/20 text-purple-300'
+                    : 'bg-slate-700 text-slate-400'
                 }`}>
                   {user.role === 'admin' ? 'Admin' : 'Member'}
                 </span>
@@ -58,14 +88,15 @@ export default function Layout() {
             </div>
             <button
               onClick={logout}
-              className="w-full text-left px-2 py-1.5 text-xs text-gray-500 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+              className="flex items-center gap-2 w-full px-2 py-1.5 text-xs text-slate-500 hover:text-red-400 hover:bg-slate-800 rounded-lg transition-colors duration-150"
             >
+              <LogOut size={14} />
               Sign out
             </button>
           </div>
         )}
       </aside>
-      <main className="flex-1 overflow-auto p-6">
+      <main className="flex-1 overflow-auto p-8">
         <Outlet />
       </main>
     </div>
