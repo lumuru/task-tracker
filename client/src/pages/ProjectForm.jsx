@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import { useNavigate, useParams, Link } from 'react-router-dom';
-import { getProject, createProject, updateProject, addProjectMembers, removeProjectMember } from '../api/projects';
+import { useNavigate, useParams, useSearchParams, Link } from 'react-router-dom';
+import { getProject, getProjects, createProject, updateProject, addProjectMembers, removeProjectMember } from '../api/projects';
 import { getMembers } from '../api/members';
 
 const STATUSES = ['active', 'archived'];
@@ -27,9 +27,19 @@ export default function ProjectForm() {
   const [selectedMemberIds, setSelectedMemberIds] = useState([]);
   const [existingMemberIds, setExistingMemberIds] = useState([]);
   const [addMemberValue, setAddMemberValue] = useState('');
+  const [searchParams] = useSearchParams();
+  const [projectType, setProjectType] = useState(searchParams.get('parent_id') ? 'sub' : 'main');
+  const [parentId, setParentId] = useState(searchParams.get('parent_id') || '');
+  const [mainProjects, setMainProjects] = useState([]);
 
   useEffect(() => {
     getMembers().then(setMembers);
+
+    // Fetch main projects (projects with no parent) for the parent dropdown
+    getProjects().then((all) => {
+      const mains = all.filter(p => !p.parent_id);
+      setMainProjects(mains);
+    });
 
     if (isEditing) {
       getProject(id)
@@ -42,6 +52,10 @@ export default function ProjectForm() {
             created_by: project.created_by || '',
           });
           setCreatedByName(project.created_by_name || '');
+          if (project.parent_id) {
+            setProjectType('sub');
+            setParentId(String(project.parent_id));
+          }
           const memberIds = project.members.map((m) => m.id);
           setSelectedMemberIds(memberIds);
           setExistingMemberIds(memberIds);
@@ -50,6 +64,15 @@ export default function ProjectForm() {
         .catch((err) => { setError(err.message); setLoading(false); });
     }
   }, [id]);
+
+  useEffect(() => {
+    if (!isEditing && projectType === 'sub' && parentId) {
+      getProject(parentId).then((parent) => {
+        const parentMemberIds = parent.members.map(m => m.id);
+        setSelectedMemberIds(parentMemberIds);
+      }).catch(() => {});
+    }
+  }, [parentId, projectType, isEditing]);
 
   const handleChange = (e) => {
     setForm({ ...form, [e.target.name]: e.target.value });
@@ -70,6 +93,10 @@ export default function ProjectForm() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (!isEditing && projectType === 'sub' && !parentId) {
+      setError('Please select a parent project');
+      return;
+    }
     if (!form.name.trim()) { setError('Name is required'); return; }
 
     try {
@@ -97,6 +124,7 @@ export default function ProjectForm() {
           ...form,
           created_by: form.created_by || null,
           member_ids: selectedMemberIds,
+          parent_id: projectType === 'sub' ? Number(parentId) : null,
         });
         navigate(`/projects/${created.id}`);
       }
@@ -124,6 +152,52 @@ export default function ProjectForm() {
       {error && <div className="mb-4 p-3 bg-red-50 text-red-700 rounded-lg text-sm">{error}</div>}
 
       <form onSubmit={handleSubmit} className="space-y-5">
+        {/* Project Type — only in create mode */}
+        {!isEditing && (
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Project Type</label>
+            <div className="flex gap-3">
+              <label className={`flex items-center gap-2 px-4 py-2.5 border rounded-lg cursor-pointer text-sm transition-colors ${projectType === 'main' ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-gray-300 text-gray-600 hover:bg-gray-50'}`}>
+                <input type="radio" name="projectType" value="main" checked={projectType === 'main'} onChange={() => { setProjectType('main'); setParentId(''); setSelectedMemberIds([]); }} className="sr-only" />
+                Main Project
+              </label>
+              <label className={`flex items-center gap-2 px-4 py-2.5 border rounded-lg cursor-pointer text-sm transition-colors ${projectType === 'sub' ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-gray-300 text-gray-600 hover:bg-gray-50'}`}>
+                <input type="radio" name="projectType" value="sub" checked={projectType === 'sub'} onChange={() => setProjectType('sub')} className="sr-only" />
+                Sub-Project
+              </label>
+            </div>
+          </div>
+        )}
+
+        {/* Parent Project — only when Sub-Project type selected in create mode */}
+        {!isEditing && projectType === 'sub' && (
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Parent Project *</label>
+            <select
+              value={parentId}
+              onChange={(e) => setParentId(e.target.value)}
+              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">— Select main project —</option>
+              {mainProjects.map((p) => (
+                <option key={p.id} value={p.id}>{p.name}</option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        {/* Parent Project — read-only in edit mode */}
+        {isEditing && projectType === 'sub' && (
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Parent Project</label>
+            <p className="px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-600">
+              <Link to={`/projects/${parentId}`} className="text-blue-600 hover:text-blue-800">
+                {mainProjects.find(p => p.id === Number(parentId))?.name || 'Loading...'}
+              </Link>
+            </p>
+          </div>
+        )}
+
         {/* Name */}
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Name *</label>
