@@ -119,7 +119,7 @@ export default function BugDetail() {
         <div className="grid grid-cols-2 gap-4">
           <div>
             <h3 className="text-sm font-medium text-gray-500 mb-1">Assigned To</h3>
-            <p className="text-sm text-gray-800">{bug.assigned_to_name || 'Unassigned'}</p>
+            <p className="text-sm text-gray-800">{bug.assigned_to || 'Unassigned'}</p>
           </div>
           <div>
             <h3 className="text-sm font-medium text-gray-500 mb-1">Reported By</h3>

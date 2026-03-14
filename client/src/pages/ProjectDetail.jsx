@@ -576,7 +576,7 @@ function BugsTab({ projectId }) {
                         {bug.priority}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-sm text-gray-500">{bug.assigned_to_name || '\u2014'}</td>
+                    <td className="px-4 py-3 text-sm text-gray-500">{bug.assigned_to || '\u2014'}</td>
                     <td className="px-4 py-3 text-sm text-gray-500">{bug.module || '\u2014'}</td>
                     <td className="px-4 py-3 text-right space-x-3">
                       <Link to={`/bugs/${bug.id}/edit`} className="text-sm text-blue-600 hover:text-blue-800">Edit</Link>

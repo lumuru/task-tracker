@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { getBugs, getBugModules, deleteBug } from '../api/bugs';
-import { getMembers } from '../api/members';
+
 import { getProjects } from '../api/projects';
 import FuzzyFilter from '../components/FuzzyFilter';
 
@@ -45,7 +45,6 @@ export default function Bugs() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [bugs, setBugs] = useState([]);
   const [modules, setModules] = useState([]);
-  const [members, setMembers] = useState([]);
   const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -66,15 +65,13 @@ export default function Bugs() {
       setLoading(true);
       const activeFilters = {};
       Object.entries(filters).forEach(([k, v]) => { if (v) activeFilters[k] = v; });
-      const [bugsData, modsData, memsData, projsData] = await Promise.all([
+      const [bugsData, modsData, projsData] = await Promise.all([
         getBugs(activeFilters),
         getBugModules(),
-        getMembers(),
         getProjects(),
       ]);
       setBugs(bugsData);
       setModules(modsData);
-      setMembers(memsData);
       setProjects(projsData);
       setError(null);
     } catch (err) {
@@ -159,11 +156,12 @@ export default function Bugs() {
           placeholder="All Priorities"
         />
 
-        <FuzzyFilter
-          options={members.map(m => ({ value: String(m.id), label: m.name }))}
+        <input
+          type="text"
           value={filters.assigned_to}
-          onChange={(v) => updateFilter('assigned_to', v)}
-          placeholder="All Assignees"
+          onChange={(e) => updateFilter('assigned_to', e.target.value)}
+          placeholder="Filter by assignee..."
+          className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 w-40"
         />
 
         <FuzzyFilter
@@ -222,7 +220,7 @@ export default function Bugs() {
                       {bug.priority}
                     </span>
                   </td>
-                  <td className="px-4 py-3 text-sm text-gray-500">{bug.assigned_to_name || '—'}</td>
+                  <td className="px-4 py-3 text-sm text-gray-500">{bug.assigned_to || '—'}</td>
                   <td className="px-4 py-3 text-sm text-gray-500">{bug.module || '—'}</td>
                   <td className="px-4 py-3 text-right space-x-2">
                     <Link to={`/bugs/${bug.id}/edit`} className="text-sm text-blue-600 hover:text-blue-800">Edit</Link>
