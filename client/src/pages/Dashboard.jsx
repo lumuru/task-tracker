@@ -2,25 +2,14 @@ import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { authFetch, getToken } from '../api/base';
-import {
-  FolderKanban,
-  Users,
-  Zap,
-  Bug as BugIcon,
-  TrendingUp,
-  Info,
-} from 'lucide-react';
+import { Info } from 'lucide-react';
+import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip } from 'recharts';
 
-const statusColors = {
-  active: 'bg-emerald-50 text-emerald-700',
-  archived: 'bg-gray-100 text-gray-500',
-};
-
-const severityDotColors = {
-  critical: 'bg-red-500',
-  major: 'bg-orange-500',
-  minor: 'bg-yellow-500',
-  trivial: 'bg-gray-400',
+const severityColors = {
+  critical: '#dc2626',
+  major: '#ea580c',
+  minor: '#ca8a04',
+  trivial: '#94a3b8',
 };
 
 const severityBadgeColors = {
@@ -37,33 +26,103 @@ function passRateColor(rate) {
   return 'text-red-600';
 }
 
-const statCards = [
-  { key: 'total_projects', label: 'Total Projects', icon: FolderKanban, borderColor: 'border-l-blue-500', iconBg: 'bg-blue-50', iconColor: 'text-blue-600', linkTo: '/projects' },
-  { key: 'total_users', label: 'Testers', icon: Users, borderColor: 'border-l-violet-500', iconBg: 'bg-violet-50', iconColor: 'text-violet-600' },
-  { key: 'active_projects', label: 'Active Projects', icon: Zap, borderColor: 'border-l-emerald-500', iconBg: 'bg-emerald-50', iconColor: 'text-emerald-600', valueColor: 'text-emerald-600', linkTo: '/projects' },
-  { key: 'open_defects', label: 'Open Defects', icon: BugIcon, borderColor: 'border-l-red-500', iconBg: 'bg-red-50', iconColor: 'text-red-600', valueColor: 'text-red-600', linkTo: '/bugs' },
-  { key: 'avg_pass_rate', label: 'Avg Pass Rate', icon: TrendingUp, borderColor: 'border-l-amber-500', iconBg: 'bg-amber-50', iconColor: 'text-amber-600', isRate: true },
-];
+function passRateBarColor(rate) {
+  if (rate === null || rate === undefined) return 'bg-slate-100';
+  if (rate >= 80) return 'bg-emerald-400';
+  if (rate >= 50) return 'bg-amber-400';
+  return 'bg-red-400';
+}
 
-function StatCard({ label, value, subtitle, icon: Icon, borderColor, iconBg, iconColor, valueColor, linkTo, user }) {
-  const Wrapper = user && linkTo ? Link : 'div';
-  const wrapperProps = user && linkTo ? { to: linkTo } : {};
+function PassRateRing({ rate, totalRuns, passed, failed }) {
+  const safeRate = rate ?? 0;
+  const hasData = rate !== null && rate !== undefined;
+  const data = [
+    { value: safeRate },
+    { value: 100 - safeRate },
+  ];
+  const ringColor = safeRate >= 80 ? '#10b981' : safeRate >= 50 ? '#f59e0b' : '#ef4444';
 
   return (
-    <Wrapper
-      {...wrapperProps}
-      className={`p-5 bg-white rounded-xl shadow-sm border-l-4 ${borderColor} hover:shadow-md transition-all duration-200 hover:scale-[1.02] ${user && linkTo ? 'cursor-pointer' : ''}`}
-    >
-      <div className="flex items-center gap-3 mb-3">
-        <div className={`w-8 h-8 rounded-lg ${iconBg} flex items-center justify-center`}>
-          <Icon size={16} className={iconColor} />
-        </div>
-        <p className="text-xs font-medium uppercase tracking-wider text-slate-500">{label}</p>
+    <div className="relative w-36 h-36">
+      <ResponsiveContainer width="100%" height="100%">
+        <PieChart>
+          <Pie
+            data={data}
+            cx="50%"
+            cy="50%"
+            innerRadius={48}
+            outerRadius={62}
+            startAngle={90}
+            endAngle={-270}
+            dataKey="value"
+            stroke="none"
+          >
+            <Cell fill={hasData ? ringColor : '#e2e8f0'} />
+            <Cell fill="#f1f5f9" />
+          </Pie>
+        </PieChart>
+      </ResponsiveContainer>
+      <div className="absolute inset-0 flex flex-col items-center justify-center">
+        <span className={`text-2xl font-bold tracking-tight ${passRateColor(rate)}`}>
+          {hasData ? `${safeRate}%` : '\u2014'}
+        </span>
       </div>
-      <p className={`text-3xl font-semibold ${valueColor || 'text-slate-800'}`}>{value}</p>
-      {subtitle && <p className="text-xs text-slate-400 mt-1">{subtitle}</p>}
-    </Wrapper>
+    </div>
   );
+}
+
+function BugSeverityChart({ data }) {
+  const ordered = ['critical', 'major', 'minor', 'trivial'];
+  const chartData = ordered
+    .map((s) => {
+      const found = data.find((d) => d.severity === s);
+      return found ? { name: s.charAt(0).toUpperCase() + s.slice(1), count: found.count, severity: s } : null;
+    })
+    .filter(Boolean);
+
+  if (chartData.length === 0) return <p className="text-sm text-slate-400 py-4">No open bugs.</p>;
+
+  return (
+    <div className="h-36">
+      <ResponsiveContainer width="100%" height="100%">
+        <BarChart data={chartData} layout="vertical" margin={{ left: 4, right: 16, top: 4, bottom: 4 }}>
+          <XAxis type="number" hide />
+          <YAxis
+            type="category"
+            dataKey="name"
+            width={56}
+            tick={{ fontSize: 11, fill: '#64748b' }}
+            axisLine={false}
+            tickLine={false}
+          />
+          <Tooltip
+            cursor={false}
+            contentStyle={{ fontSize: 12, borderRadius: 6, border: '1px solid #e2e8f0', boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}
+            formatter={(value) => [value, 'Bugs']}
+          />
+          <Bar dataKey="count" radius={[0, 3, 3, 0]} barSize={14}>
+            {chartData.map((entry) => (
+              <Cell key={entry.name} fill={severityColors[entry.severity] || '#9ca3af'} />
+            ))}
+          </Bar>
+        </BarChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
+function formatDate(dateStr) {
+  if (!dateStr) return '';
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return dateStr;
+  const now = new Date();
+  const diff = now - d;
+  const days = Math.floor(diff / 86400000);
+  if (days === 0) return 'today';
+  if (days === 1) return 'yesterday';
+  if (days < 7) return `${days}d ago`;
+  if (days < 30) return `${Math.floor(days / 7)}w ago`;
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
 export default function Dashboard() {
@@ -71,7 +130,6 @@ export default function Dashboard() {
   const [stats, setStats] = useState(null);
   const [activity, setActivity] = useState(null);
   const [projectSummary, setProjectSummary] = useState(null);
-  const [teamAssignments, setTeamAssignments] = useState(null);
   const [error, setError] = useState(null);
 
   useEffect(() => {
@@ -88,313 +146,234 @@ export default function Dashboard() {
       fetchFn('/api/dashboard/stats').then(r => r.json()),
       fetchFn('/api/dashboard/activity').then(r => r.json()),
       fetchFn('/api/dashboard/project-summary').then(r => r.json()),
-      fetchFn('/api/dashboard/team-assignments').then(r => r.json()),
     ])
-      .then(([s, a, p, t]) => { setStats(s); setActivity(a); setProjectSummary(p); setTeamAssignments(t); })
+      .then(([s, a, p]) => { setStats(s); setActivity(a); setProjectSummary(p); })
       .catch((err) => setError(err.message));
   }, []);
 
-  if (error) return <div className="p-4 bg-red-50 text-red-700 rounded-xl text-sm">{error}</div>;
+  if (error) return <div className="p-4 bg-red-50 text-red-700 rounded-lg text-sm">{error}</div>;
   if (!stats) return (
     <div className="flex items-center justify-center h-64">
       <div className="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
     </div>
   );
 
-  const getStatValue = (key) => {
-    if (key === 'open_defects') return stats.bugs?.open ?? 0;
-    if (key === 'avg_pass_rate') return stats.avg_pass_rate > 0 ? `${stats.avg_pass_rate}%` : '\u2014';
-    return stats[key] ?? 0;
-  };
+  const latestRun = stats.latest_run;
+  const totalPassed = latestRun?.passed ?? 0;
+  const totalFailed = latestRun?.failed ?? 0;
 
-  const getStatSubtitle = (key) => {
-    if (key === 'open_defects') return `${stats.bugs?.total ?? 0} total`;
-    return null;
-  };
+  // Public view: show all projects so outside teams get full visibility
+  // Authenticated users: only show projects with activity (they can navigate to /projects for the rest)
+  const allProjects = projectSummary || [];
+  const activeProjects = user
+    ? allProjects.filter(p => p.test_case_count > 0 || p.open_defects > 0)
+    : allProjects;
+  const emptyProjects = user
+    ? allProjects.filter(p => p.test_case_count === 0 && p.open_defects === 0)
+    : [];
+
+  // Merge recent bugs + runs into a single activity feed
+  const activityFeed = [];
+  if (activity) {
+    activity.recent_bugs?.forEach((bug) => {
+      activityFeed.push({ type: 'bug', id: bug.id, title: bug.title, date: bug.created_at, severity: bug.severity, by: bug.reported_by_name });
+    });
+    activity.recent_runs?.forEach((run) => {
+      const executed = run.passed + run.failed + run.blocked;
+      const rate = executed > 0 ? Math.round((run.passed / executed) * 100) : null;
+      activityFeed.push({ type: 'run', id: run.id, title: run.name, date: run.date || run.created_at, project: run.project_name, rate, by: run.created_by_name });
+    });
+  }
+  activityFeed.sort((a, b) => new Date(b.date) - new Date(a.date));
+  const recentActivity = activityFeed.slice(0, 10);
 
   return (
-    <div>
-      <h2 className="text-2xl font-semibold text-slate-800 mb-6">Dashboard</h2>
-
+    <div className="space-y-8">
       {!user && (
-        <div className="mb-6 p-4 bg-blue-50 border border-blue-100 rounded-xl text-sm text-blue-700 flex items-center gap-3">
-          <Info size={18} className="text-blue-500 flex-shrink-0" />
-          You are viewing the public dashboard. Login to access full features and manage your projects.
+        <div className="p-3 bg-blue-50/80 border border-blue-100 rounded-lg text-sm text-blue-700 flex items-center gap-2">
+          <Info size={16} className="text-blue-500 flex-shrink-0" />
+          Public view. Log in to manage projects.
         </div>
       )}
 
-      {/* Summary Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 mb-8">
-        {statCards.map((card) => (
-          <StatCard
-            key={card.key}
-            label={card.label}
-            value={getStatValue(card.key)}
-            subtitle={getStatSubtitle(card.key)}
-            icon={card.icon}
-            borderColor={card.borderColor}
-            iconBg={card.iconBg}
-            iconColor={card.iconColor}
-            valueColor={card.isRate ? passRateColor(stats.avg_pass_rate) : card.valueColor}
-            linkTo={card.linkTo}
-            user={user}
-          />
-        ))}
-      </div>
+      {/* Hero — pass rate + key numbers in a single card */}
+      <div className="bg-white rounded-xl border border-slate-200/80 shadow-sm">
+        <div className="p-6 flex flex-col sm:flex-row items-center gap-8">
+          {/* Ring */}
+          <div className="flex-shrink-0">
+            <PassRateRing
+              rate={stats.avg_pass_rate > 0 ? stats.avg_pass_rate : null}
+              totalRuns={stats.test_runs}
+              passed={totalPassed}
+              failed={totalFailed}
+            />
+          </div>
 
-      {/* Project Overview Table */}
-      {projectSummary && projectSummary.length > 0 && (
-        <div className="mb-8">
-          <h3 className="text-xs font-medium uppercase tracking-wider text-slate-500 mb-3">Project Overview</h3>
-          <div className="bg-white rounded-xl shadow-sm overflow-hidden">
-            <table className="min-w-full">
-              <thead>
-                <tr className="bg-slate-50/80">
-                  <th className="px-5 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500">Project</th>
-                  <th className="px-5 py-3 text-center text-xs font-medium uppercase tracking-wider text-slate-500">Test Cases</th>
-                  <th className="px-5 py-3 text-center text-xs font-medium uppercase tracking-wider text-slate-500">Status</th>
-                  <th className="px-5 py-3 text-center text-xs font-medium uppercase tracking-wider text-slate-500">Open Defects</th>
-                  <th className="px-5 py-3 text-center text-xs font-medium uppercase tracking-wider text-slate-500">Pass Rate</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {projectSummary.map((p) => (
-                  <tr key={p.id} className="hover:bg-slate-50/50 transition-colors">
-                    <td className="px-5 py-3.5">
-                      {user ? (
-                        <Link to={`/projects/${p.id}`} className="text-sm text-blue-600 hover:text-blue-700 font-medium">
-                          {p.name}
-                        </Link>
-                      ) : (
-                        <span className="text-sm text-slate-800 font-medium">{p.name}</span>
-                      )}
-                    </td>
-                    <td className="px-5 py-3.5 text-center text-sm text-slate-700 font-medium">{p.test_case_count}</td>
-                    <td className="px-5 py-3.5 text-center">
-                      <span className={`inline-block px-2.5 py-0.5 text-xs font-medium rounded-full capitalize ${statusColors[p.status] || ''}`}>
-                        {p.status}
-                      </span>
-                    </td>
-                    <td className={`px-5 py-3.5 text-center text-sm font-medium ${p.open_defects > 0 ? 'text-red-600' : 'text-slate-400'}`}>
-                      {p.open_defects}
-                    </td>
-                    <td className={`px-5 py-3.5 text-center text-sm font-semibold ${passRateColor(p.latest_pass_rate)}`}>
-                      {p.latest_pass_rate !== null ? `${p.latest_pass_rate}%` : '\u2014'}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          {/* Stats grid */}
+          <div className="flex-1 grid grid-cols-2 sm:grid-cols-4 gap-x-8 gap-y-4 w-full">
+            <div>
+              <div className="text-2xl font-bold text-slate-800">{stats.test_runs ?? 0}</div>
+              <div className="text-xs text-slate-400 mt-0.5">test runs</div>
+            </div>
+            <div>
+              <div className="text-2xl font-bold text-slate-800">
+                {totalPassed}
+                <span className="text-sm font-normal text-slate-300 ml-1">/ {totalFailed} fail</span>
+              </div>
+              <div className="text-xs text-slate-400 mt-0.5">passed (latest)</div>
+            </div>
+            <div>
+              <div className="flex items-baseline gap-1.5">
+                <span className={`text-2xl font-bold ${stats.bugs?.open > 0 ? 'text-red-600' : 'text-slate-800'}`}>
+                  {stats.bugs?.open ?? 0}
+                </span>
+                {user && <Link to="/bugs" className="text-xs text-slate-400 hover:text-blue-500">view</Link>}
+              </div>
+              <div className="text-xs text-slate-400 mt-0.5">open defects</div>
+            </div>
+            <div>
+              <div className="flex items-baseline gap-1.5">
+                <span className="text-2xl font-bold text-slate-800">{stats.active_projects}</span>
+                <span className="text-sm text-slate-300">/ {stats.total_projects}</span>
+              </div>
+              <div className="text-xs text-slate-400 mt-0.5">active projects</div>
+            </div>
           </div>
         </div>
-      )}
 
-      {/* Breakdown Tables */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-        {stats.status_breakdown && stats.status_breakdown.length > 0 && (
-          <div>
-            <h3 className="text-xs font-medium uppercase tracking-wider text-slate-500 mb-3">Status Breakdown</h3>
-            <div className="bg-white rounded-xl shadow-sm overflow-hidden">
-              <table className="min-w-full">
-                <thead>
-                  <tr className="bg-slate-50/80">
-                    <th className="px-5 py-2.5 text-left text-xs font-medium uppercase tracking-wider text-slate-500">Status</th>
-                    <th className="px-5 py-2.5 text-right text-xs font-medium uppercase tracking-wider text-slate-500">Count</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {stats.status_breakdown.map(({ status, count }) => (
-                    <tr key={status} className="hover:bg-slate-50/50 transition-colors">
-                      <td className="px-5 py-2.5 text-sm text-slate-700 capitalize">{status}</td>
-                      <td className="px-5 py-2.5 text-sm text-slate-800 font-medium text-right">{count}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
-
-        {stats.priority_breakdown && stats.priority_breakdown.length > 0 && (
-          <div>
-            <h3 className="text-xs font-medium uppercase tracking-wider text-slate-500 mb-3">Priority Breakdown</h3>
-            <div className="bg-white rounded-xl shadow-sm overflow-hidden">
-              <table className="min-w-full">
-                <thead>
-                  <tr className="bg-slate-50/80">
-                    <th className="px-5 py-2.5 text-left text-xs font-medium uppercase tracking-wider text-slate-500">Priority</th>
-                    <th className="px-5 py-2.5 text-right text-xs font-medium uppercase tracking-wider text-slate-500">Count</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {stats.priority_breakdown.map(({ priority, count }) => (
-                    <tr key={priority} className="hover:bg-slate-50/50 transition-colors">
-                      <td className="px-5 py-2.5 text-sm text-slate-700 capitalize">{priority}</td>
-                      <td className="px-5 py-2.5 text-sm text-slate-800 font-medium text-right">{count}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+        {/* Severity pills inline — only if there are bugs */}
+        {stats.bugs_by_severity?.length > 0 && (
+          <div className="px-6 pb-4 flex items-center gap-2 flex-wrap">
+            <span className="text-xs text-slate-400 mr-1">By severity:</span>
+            {stats.bugs_by_severity.map(({ severity, count }) => (
+              <span
+                key={severity}
+                className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full"
+                style={{ backgroundColor: `${severityColors[severity]}12`, color: severityColors[severity] }}
+              >
+                <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: severityColors[severity] }} />
+                {count} {severity}
+              </span>
+            ))}
           </div>
         )}
       </div>
 
-      {/* Team Assignments */}
-      {teamAssignments && teamAssignments.length > 0 && (
-        <div className="mb-8">
-          <h3 className="text-xs font-medium uppercase tracking-wider text-slate-500 mb-3">Team Assignments</h3>
-          <div className="bg-white rounded-xl shadow-sm divide-y divide-slate-100">
-            {[...teamAssignments].sort((a, b) => b.project_count - a.project_count).map((member) => (
-              <div key={member.id} className="px-5 py-4 flex items-start gap-3">
-                <div className="w-8 h-8 rounded-full bg-blue-500 text-white flex items-center justify-center text-sm font-semibold flex-shrink-0 mt-0.5">
-                  {member.name.charAt(0).toUpperCase()}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-semibold text-slate-800">{member.name}</span>
-                    <span className="text-xs text-slate-400 capitalize">{member.role}</span>
-                  </div>
-                  {member.projects.length > 0 ? (
-                    <div className="flex flex-wrap gap-1.5 mt-2">
-                      {member.projects.map((p) => {
-                        const cls = `inline-flex items-center gap-1 px-2.5 py-0.5 text-xs font-medium rounded-full ${
-                          p.status === 'active'
-                            ? 'bg-blue-50 text-blue-700'
-                            : 'bg-gray-100 text-gray-500'
-                        }`;
-                        return user ? (
-                          <Link key={p.id} to={`/projects/${p.id}`} className={`${cls} hover:opacity-80 transition-opacity`}>
-                            <span className={`w-1.5 h-1.5 rounded-full ${p.status === 'active' ? 'bg-blue-400' : 'bg-gray-300'}`} />
-                            {p.name}
-                          </Link>
-                        ) : (
-                          <span key={p.id} className={cls}>
-                            <span className={`w-1.5 h-1.5 rounded-full ${p.status === 'active' ? 'bg-blue-400' : 'bg-gray-300'}`} />
-                            {p.name}
-                          </span>
-                        );
-                      })}
-                    </div>
+      {/* Project Health */}
+      {activeProjects.length > 0 && (
+        <div>
+          <div className="flex items-baseline justify-between mb-3">
+            <h3 className="text-sm font-semibold text-slate-700">Project Health</h3>
+            {user && (
+              <Link to="/projects" className="text-xs text-slate-400 hover:text-blue-500">All projects</Link>
+            )}
+          </div>
+          <div className="bg-white rounded-xl border border-slate-200/80 shadow-sm divide-y divide-slate-100">
+            {activeProjects.map((p) => (
+              <div key={p.id} className="px-5 py-3 flex items-center gap-4">
+                <div className="w-48 min-w-0">
+                  {user ? (
+                    <Link to={`/projects/${p.id}`} className="text-sm font-medium text-slate-800 hover:text-blue-600 truncate block">
+                      {p.name}
+                    </Link>
                   ) : (
-                    <p className="text-xs text-slate-400 mt-1">No projects assigned</p>
+                    <span className="text-sm font-medium text-slate-800 truncate block">{p.name}</span>
                   )}
                 </div>
-                <span className="text-xs text-slate-400 flex-shrink-0 mt-1">
-                  {member.project_count} project{member.project_count !== 1 ? 's' : ''}
-                </span>
+                <div className="flex-1 flex items-center gap-3">
+                  <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                    {p.latest_pass_rate !== null && (
+                      <div
+                        className={`h-full rounded-full transition-all ${passRateBarColor(p.latest_pass_rate)}`}
+                        style={{ width: `${p.latest_pass_rate}%` }}
+                      />
+                    )}
+                  </div>
+                  <span className={`text-xs font-semibold w-10 text-right tabular-nums ${passRateColor(p.latest_pass_rate)}`}>
+                    {p.latest_pass_rate !== null ? `${p.latest_pass_rate}%` : '\u2014'}
+                  </span>
+                </div>
+                <div className="flex items-center gap-4 text-xs text-slate-400 tabular-nums">
+                  <span>{p.test_case_count} tests</span>
+                  {p.open_defects > 0 ? (
+                    <span className="text-red-500 font-medium">{p.open_defects} bugs</span>
+                  ) : (
+                    <span className="w-12" />
+                  )}
+                </div>
               </div>
             ))}
           </div>
+          {emptyProjects.length > 0 && (
+            <p className="text-xs text-slate-400 mt-2 ml-1">
+              + {emptyProjects.length} project{emptyProjects.length > 1 ? 's' : ''} with no test data
+            </p>
+          )}
         </div>
       )}
 
-      {/* Open Bugs by Severity */}
-      {stats.bugs_by_severity.length > 0 && (
-        <div className="mb-8">
-          <h3 className="text-xs font-medium uppercase tracking-wider text-slate-500 mb-3">Open Bugs by Severity</h3>
-          <div className="flex gap-3">
-            {stats.bugs_by_severity.map(({ severity, count }) => {
-              const inner = (
-                <>
-                  <span className={`w-2.5 h-2.5 rounded-full ${severityDotColors[severity] || 'bg-gray-400'}`} />
-                  <span className="text-sm font-medium text-slate-700 capitalize">{severity}</span>
-                  <span className="text-sm font-bold text-slate-800">{count}</span>
-                </>
-              );
-              return user ? (
-                <Link key={severity} to={`/bugs?severity=${severity}`} className="flex items-center gap-2 px-4 py-2.5 bg-white rounded-xl shadow-sm hover:shadow-md transition-all duration-200">
-                  {inner}
-                </Link>
-              ) : (
-                <div key={severity} className="flex items-center gap-2 px-4 py-2.5 bg-white rounded-xl shadow-sm">
-                  {inner}
-                </div>
-              );
-            })}
-          </div>
+      {/* Bottom — Bug chart + Activity feed */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Bug Distribution */}
+        <div className="bg-white rounded-xl border border-slate-200/80 shadow-sm p-5">
+          <h3 className="text-sm font-semibold text-slate-700 mb-4">Bug Distribution</h3>
+          <BugSeverityChart data={stats.bugs_by_severity || []} />
         </div>
-      )}
 
-      {/* Recent Activity */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Recent Bugs */}
-        <div>
-          <h3 className="text-xs font-medium uppercase tracking-wider text-slate-500 mb-3">Recent Bugs</h3>
-          {activity && activity.recent_bugs.length > 0 ? (
-            <div className="bg-white rounded-xl shadow-sm divide-y divide-slate-100">
-              {activity.recent_bugs.map((bug) => (
-                <div key={bug.id} className="px-5 py-3.5 flex items-center justify-between hover:bg-slate-50/50 transition-colors">
+        {/* Recent Activity */}
+        <div className="lg:col-span-2 bg-white rounded-xl border border-slate-200/80 shadow-sm p-5">
+          <h3 className="text-sm font-semibold text-slate-700 mb-4">Recent Activity</h3>
+          {recentActivity.length > 0 ? (
+            <div className="space-y-0">
+              {recentActivity.map((item, idx) => (
+                <div
+                  key={`${item.type}-${item.id}`}
+                  className={`flex items-center gap-3 py-2 ${idx > 0 ? 'border-t border-slate-50' : ''}`}
+                >
+                  <span
+                    className={`flex-shrink-0 text-[10px] font-semibold uppercase tracking-wide w-8 text-center py-0.5 rounded ${
+                      item.type === 'bug'
+                        ? 'bg-red-50 text-red-500'
+                        : 'bg-blue-50 text-blue-500'
+                    }`}
+                  >
+                    {item.type === 'bug' ? 'BUG' : 'RUN'}
+                  </span>
                   <div className="min-w-0 flex-1">
                     {user ? (
-                      <Link to={`/bugs/${bug.id}`} className="text-sm text-slate-800 hover:text-blue-600 font-medium truncate block transition-colors">
-                        {bug.title}
+                      <Link
+                        to={item.type === 'bug' ? `/bugs/${item.id}` : `/test-runs/${item.id}`}
+                        className="text-sm text-slate-700 hover:text-blue-600 truncate block"
+                      >
+                        {item.title}
                       </Link>
                     ) : (
-                      <span className="text-sm text-slate-800 font-medium truncate block">{bug.title}</span>
+                      <span className="text-sm text-slate-700 truncate block">{item.title}</span>
                     )}
-                    <p className="text-xs text-slate-400 mt-0.5">
-                      {bug.reported_by_name && <span>by {bug.reported_by_name} &middot; </span>}
-                      {bug.created_at}
-                    </p>
                   </div>
-                  <span className={`ml-3 shrink-0 inline-block px-2.5 py-0.5 text-xs font-medium rounded-full capitalize ${severityBadgeColors[bug.severity] || 'bg-gray-100 text-gray-600'}`}>
-                    {bug.severity}
-                  </span>
+                  {item.type === 'bug' && item.severity && (
+                    <span className={`flex-shrink-0 text-[10px] px-1.5 py-0.5 rounded capitalize ${severityBadgeColors[item.severity] || 'bg-gray-100 text-gray-600'}`}>
+                      {item.severity}
+                    </span>
+                  )}
+                  {item.type === 'run' && item.rate !== null && (
+                    <span className={`flex-shrink-0 text-xs font-semibold tabular-nums ${passRateColor(item.rate)}`}>{item.rate}%</span>
+                  )}
+                  <span className="text-[11px] text-slate-400 flex-shrink-0 w-16 text-right">{formatDate(item.date)}</span>
                 </div>
               ))}
             </div>
           ) : (
-            <p className="text-sm text-slate-400">No bugs reported yet.</p>
+            <p className="text-sm text-slate-400 py-4">No activity yet.</p>
           )}
         </div>
+      </div>
 
-        {/* Recent Test Runs */}
-        <div>
-          <h3 className="text-xs font-medium uppercase tracking-wider text-slate-500 mb-3">Recent Test Runs</h3>
-          {activity && activity.recent_runs && activity.recent_runs.length > 0 ? (
-            <div className="bg-white rounded-xl shadow-sm divide-y divide-slate-100">
-              {activity.recent_runs.map((run) => {
-                const executed = run.passed + run.failed + run.blocked;
-                const rate = executed > 0 ? Math.round((run.passed / executed) * 100) : null;
-                return (
-                  <div key={run.id} className="px-5 py-3.5 flex items-center justify-between hover:bg-slate-50/50 transition-colors">
-                    <div className="min-w-0 flex-1">
-                      {user ? (
-                        <Link to={`/test-runs/${run.id}`} className="text-sm text-slate-800 hover:text-blue-600 font-medium truncate block transition-colors">
-                          {run.name}
-                        </Link>
-                      ) : (
-                        <span className="text-sm text-slate-800 font-medium truncate block">{run.name}</span>
-                      )}
-                      <p className="text-xs text-slate-400 mt-0.5">
-                        {run.project_name && <span>{run.project_name} &middot; </span>}
-                        {run.date || run.created_at}
-                        {run.created_by_name && <span> &middot; {run.created_by_name}</span>}
-                      </p>
-                    </div>
-                    <div className="ml-3 flex items-center gap-2 flex-shrink-0">
-                      {run.total > 0 && (
-                        <div className="flex gap-1 text-xs">
-                          {run.passed > 0 && <span className="px-1.5 py-0.5 bg-emerald-50 text-emerald-700 rounded-full font-medium">{run.passed}P</span>}
-                          {run.failed > 0 && <span className="px-1.5 py-0.5 bg-red-50 text-red-700 rounded-full font-medium">{run.failed}F</span>}
-                          {run.blocked > 0 && <span className="px-1.5 py-0.5 bg-amber-50 text-amber-700 rounded-full font-medium">{run.blocked}B</span>}
-                        </div>
-                      )}
-                      {rate !== null ? (
-                        <span className={`text-xs font-bold ${passRateColor(rate)}`}>{rate}%</span>
-                      ) : (
-                        <span className="text-xs text-slate-300">&mdash;</span>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          ) : (
-            <p className="text-sm text-slate-400">No test runs yet.</p>
-          )}
-        </div>
+      {/* Footer stats */}
+      <div className="flex items-center gap-6 text-xs text-slate-400 pb-2">
+        <span>{stats.test_cases ?? 0} test cases</span>
+        <span>{stats.total_users ?? 0} team members</span>
+        <span>{stats.bugs?.total ?? 0} total bugs ({stats.bugs?.closed ?? 0} closed)</span>
       </div>
     </div>
   );
