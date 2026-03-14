@@ -78,7 +78,7 @@ db.exec(`
     priority TEXT DEFAULT 'medium',
     status TEXT DEFAULT 'open',
     module TEXT,
-    assigned_to INTEGER REFERENCES team_members(id),
+    assigned_to TEXT,
     reported_by INTEGER REFERENCES team_members(id),
     test_case_id INTEGER REFERENCES test_cases(id),
     created_at TEXT DEFAULT (datetime('now')),
@@ -239,6 +239,46 @@ if (!trColNames.includes('override_steps')) {
   db.exec("ALTER TABLE test_results ADD COLUMN override_steps TEXT");
   db.exec("ALTER TABLE test_results ADD COLUMN override_expected_result TEXT");
   db.exec("ALTER TABLE test_results ADD COLUMN override_preconditions TEXT");
+}
+
+// Migration: convert assigned_to from INTEGER FK to free TEXT
+{
+  const bugColInfo = db.prepare("PRAGMA table_info(bugs)").all();
+  const assignedCol = bugColInfo.find(c => c.name === 'assigned_to');
+  if (assignedCol && assignedCol.type === 'INTEGER') {
+    db.pragma('foreign_keys = OFF');
+    db.exec(`
+      CREATE TABLE bugs_new (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        title TEXT NOT NULL,
+        description TEXT,
+        steps_to_reproduce TEXT,
+        severity TEXT DEFAULT 'medium',
+        priority TEXT DEFAULT 'medium',
+        status TEXT DEFAULT 'open',
+        module TEXT,
+        assigned_to TEXT,
+        reported_by INTEGER REFERENCES team_members(id),
+        test_case_id INTEGER REFERENCES test_cases(id),
+        project_id INTEGER REFERENCES projects(id),
+        created_at TEXT DEFAULT (datetime('now')),
+        updated_at TEXT DEFAULT (datetime('now'))
+      );
+      INSERT INTO bugs_new (id, title, description, steps_to_reproduce, severity, priority, status, module, assigned_to, reported_by, test_case_id, project_id, created_at, updated_at)
+        SELECT id, title, description, steps_to_reproduce, severity, priority, status, module, assigned_to, reported_by, test_case_id, project_id, created_at, updated_at FROM bugs;
+      DROP TABLE bugs;
+      ALTER TABLE bugs_new RENAME TO bugs;
+    `);
+    // Convert existing integer IDs to member names
+    const bugsWithIntAssignee = db.prepare(
+      "SELECT b.id, b.assigned_to, m.name FROM bugs b JOIN team_members m ON CAST(b.assigned_to AS INTEGER) = m.id WHERE b.assigned_to IS NOT NULL AND b.assigned_to GLOB '[0-9]*'"
+    ).all();
+    const updateStmt = db.prepare('UPDATE bugs SET assigned_to = ? WHERE id = ?');
+    for (const row of bugsWithIntAssignee) {
+      updateStmt.run(row.name, row.id);
+    }
+    db.pragma('foreign_keys = ON');
+  }
 }
 
 // Seed default settings from env vars if not already present

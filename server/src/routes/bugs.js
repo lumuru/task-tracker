@@ -20,12 +20,10 @@ router.get('/', (req, res) => {
 
   let sql = `
     SELECT b.*,
-      assignee.name as assigned_to_name,
       reporter.name as reported_by_name,
       tc.title as test_case_title,
       p.name as project_name
     FROM bugs b
-    LEFT JOIN team_members assignee ON b.assigned_to = assignee.id
     LEFT JOIN team_members reporter ON b.reported_by = reporter.id
     LEFT JOIN test_cases tc ON b.test_case_id = tc.id
     LEFT JOIN projects p ON b.project_id = p.id
@@ -51,8 +49,8 @@ router.get('/', (req, res) => {
     params.push(priority);
   }
   if (assigned_to) {
-    conditions.push('b.assigned_to = ?');
-    params.push(assigned_to);
+    conditions.push('b.assigned_to LIKE ?');
+    params.push(`%${assigned_to}%`);
   }
   if (module) {
     conditions.push('b.module = ?');
@@ -91,12 +89,10 @@ router.get('/modules', (req, res) => {
 router.get('/:id', (req, res) => {
   const bug = db.prepare(`
     SELECT b.*,
-      assignee.name as assigned_to_name,
       reporter.name as reported_by_name,
       tc.title as test_case_title,
       p.name as project_name
     FROM bugs b
-    LEFT JOIN team_members assignee ON b.assigned_to = assignee.id
     LEFT JOIN team_members reporter ON b.reported_by = reporter.id
     LEFT JOIN test_cases tc ON b.test_case_id = tc.id
     LEFT JOIN projects p ON b.project_id = p.id
